@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(RPPinEXO VERSION 0.1.0 LANGUAGES CXX)
+project(AutoZWJ VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,7 +10,7 @@ endif()
 
 set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/src/thirdparty/imgui)
 
-add_library(RPPinEXO SHARED
+add_library(AutoZWJ SHARED
     src/plugin.cpp
     src/rpp/rpp_parser.cpp
     src/midi/midi_parser.cpp
@@ -28,18 +28,18 @@ add_library(RPPinEXO SHARED
     ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
 )
 
-target_include_directories(RPPinEXO PRIVATE
+target_include_directories(AutoZWJ PRIVATE
     ${CMAKE_SOURCE_DIR}/aviutl2_sdk
     ${CMAKE_SOURCE_DIR}/src
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
 )
 
-target_link_libraries(RPPinEXO PRIVATE
+target_link_libraries(AutoZWJ PRIVATE
     d3d11 d3dcompiler dxgi dwmapi
 )
 
-set_target_properties(RPPinEXO PROPERTIES
+set_target_properties(AutoZWJ PROPERTIES
     PREFIX ""
     SUFFIX ".aux2"
 )

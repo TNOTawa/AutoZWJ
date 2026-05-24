@@ -141,7 +141,7 @@ bool parse_rpp(const std::string& path, ObjDict& objdict,
             }
             track_index++;
 
-            if (objdict.pos.back() != -1.0) {
+            if (track_index > 1 || objdict.pos.back() != -1.0) {
                 objdict.pos.push_back(-1.0);
                 objdict.length.push_back(-1.0);
                 objdict.loop.push_back(-1);
@@ -373,22 +373,25 @@ bool parse_rpp(const std::string& path, ObjDict& objdict,
     objdict.track_count = track_index;
 
     if (!tracks.empty()) {
-        for (size_t i = 1; i < tracks.size(); i++) {
-            tracks[i].index = 0;
-            tracks[i].count = 0;
-        }
         int current_track = 0;
         for (size_t i = 1; i < objdict.pos.size(); i++) {
             if (objdict.pos[i] == -1.0) {
-                if (current_track + 1 < (int)tracks.size()) {
-                    tracks[current_track].count = (int)i - tracks[current_track].index;
-                    current_track++;
-                    tracks[current_track].index = (int)i + 1;
-                }
+                tracks[current_track].count = (int)i - tracks[current_track].index;
+                current_track++;
+                if (current_track >= (int)tracks.size()) break;
+                tracks[current_track].index = (int)i + 1;
             }
         }
         if (current_track < (int)tracks.size()) {
             tracks[current_track].count = (int)objdict.pos.size() - tracks[current_track].index;
+        }
+
+        tracks.erase(std::remove_if(tracks.begin(), tracks.end(),
+            [](const TrackNode& n) { return n.count <= 0; }), tracks.end());
+
+        for (int i = 1; i < (int)tracks.size(); i++) {
+            if (tracks[i].index < tracks[i-1].index + tracks[i-1].count)
+                tracks[i].index = tracks[i-1].index + tracks[i-1].count;
         }
     }
 

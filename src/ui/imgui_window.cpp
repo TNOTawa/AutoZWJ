@@ -123,7 +123,7 @@ static void render_frame() {
 
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-    ImGui::Begin("RPPinEXO_Main", nullptr,
+    ImGui::Begin("AutoZWJ_Main", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
@@ -202,7 +202,7 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
     if (g_initialized) return true;
 
     g_wc.cbSize = sizeof(WNDCLASSEXW);
-    g_wc.lpszClassName = L"RPPinEXO_Window";
+    g_wc.lpszClassName = L"AutoZWJ_Window";
     g_wc.lpfnWndProc = imgui_wnd_proc;
     g_wc.hInstance = hinst;
     g_wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
@@ -210,7 +210,7 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
     if (!RegisterClassExW(&g_wc)) return false;
 
     g_imgui_hwnd = CreateWindowExW(
-        0, L"RPPinEXO_Window", L"RPPinEXO - 配置导入参数",
+        0, L"AutoZWJ_Window", L"AutoZWJ - 配置导入参数",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 900, 650,
         host_window, nullptr, hinst, nullptr);
@@ -314,7 +314,7 @@ void imgui_window_shutdown() {
     ImGui::DestroyContext();
     cleanup_device();
     if (g_imgui_hwnd) { DestroyWindow(g_imgui_hwnd); g_imgui_hwnd = nullptr; }
-    UnregisterClassW(L"RPPinEXO_Window", g_wc.hInstance);
+    UnregisterClassW(L"AutoZWJ_Window", g_wc.hInstance);
     g_initialized = false;
 }
 

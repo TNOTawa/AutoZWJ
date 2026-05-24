@@ -43,8 +43,8 @@ std::string cp932_to_utf8(const std::string& cp932) {
 }
 
 COMMON_PLUGIN_TABLE common_plugin_table = {
-    L"RPPinEXO",
-    L"RPPinEXO - RPP/MIDI to AviUtl2 object importer",
+    L"AutoZWJ",
+    L"AutoZWJ - RPP/MIDI to AviUtl2 object importer",
 };
 
 EXTERN_C __declspec(dllexport) COMMON_PLUGIN_TABLE* GetCommonPluginTable(void) {
@@ -150,11 +150,11 @@ static std::string apply_template_to_item(const std::string& template_chain,
 
 static void on_generate_from_imgui() {
     if (!g_project_state.has_data) {
-        if (g_logger) g_logger->warn(g_logger, L"RPPinEXO: 未加载音频工程");
+        if (g_logger) g_logger->warn(g_logger, L"AutoZWJ: 未加载音频工程");
         return;
     }
     if (g_project_state.template_alias.empty()) {
-        if (g_logger) g_logger->error(g_logger, L"RPPinEXO: 未设置模板，请右键已选物件 → 配置导入... 重新打开");
+        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 未设置模板，请右键已选物件 → 配置导入... 重新打开");
         return;
     }
 
@@ -170,7 +170,7 @@ static void on_generate_from_imgui() {
 
     std::string chain = extract_template_chain(g_project_state.template_alias);
     if (chain.empty()) {
-        if (g_logger) g_logger->error(g_logger, L"RPPinEXO: 模板物件格式无效，请重新选择模板");
+        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 模板物件格式无效，请重新选择模板");
         return;
     }
 
@@ -207,6 +207,8 @@ static void on_generate_from_imgui() {
             size_t track_end = objdict.pos.size();
             for (size_t j = item_start + 1; j < objdict.pos.size(); j++)
                 if (objdict.pos[j] == -1.0) { track_end = j; break; }
+
+            int prev_count = item_count_global;
 
             for (size_t i = item_start; i < track_end; i++) {
                 double pos_sec = objdict.pos[i];
@@ -356,11 +358,14 @@ static void on_generate_from_imgui() {
                 gs->created++;
                 item_count_global++;
             }
-            item_start = track_end + 1;
+            if (item_count_global > prev_count)
+                item_start = track_end + 1;
+            else
+                item_start = track_end;
         }
 
         if (gs->logger)
-            gs->logger->log(gs->logger, (L"RPPinEXO: 已生成 " + std::to_wstring(gs->created) + L" 个物件").c_str());
+            gs->logger->log(gs->logger, (L"AutoZWJ: 已生成 " + std::to_wstring(gs->created) + L" 个物件").c_str());
         delete gs;
     });
 }
@@ -370,7 +375,7 @@ static void on_select_project(EDIT_SECTION* edit) {
     show_file_picker(GetActiveWindow(), [](const std::wstring& path) {
         if (parse_project_file(path)) {
             if (g_logger)
-                g_logger->log(g_logger, (L"RPPinEXO: " + get_project_summary()).c_str());
+                g_logger->log(g_logger, (L"AutoZWJ: " + get_project_summary()).c_str());
         }
     });
 }
@@ -380,19 +385,19 @@ static void on_open_config(EDIT_SECTION* edit) {
 
     int sel_num = edit->get_selected_object_num();
     if (sel_num <= 0) {
-        if (g_logger) g_logger->error(g_logger, L"RPPinEXO: 请先在时间轴上选择一个物件作为模板，再右键打开配置");
+        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 请先在时间轴上选择一个物件作为模板，再右键打开配置");
         return;
     }
 
     auto obj = edit->get_selected_object(0);
     if (!obj) {
-        if (g_logger) g_logger->error(g_logger, L"RPPinEXO: 无法获取选中物件");
+        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 无法获取选中物件");
         return;
     }
 
     LPCSTR alias_ptr = edit->get_object_alias(obj);
     if (!alias_ptr) {
-        if (g_logger) g_logger->error(g_logger, L"RPPinEXO: 无法读取模板物件数据");
+        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 无法读取模板物件数据");
         return;
     }
     g_project_state.template_alias = alias_ptr;
@@ -410,7 +415,7 @@ static void on_file_drop(EDIT_SECTION* edit, LPCWSTR file) {
     update_scene_from_edit(edit);
     if (parse_project_file(file)) {
         if (g_logger)
-            g_logger->log(g_logger, (L"RPPinEXO: " + get_project_summary()).c_str());
+            g_logger->log(g_logger, (L"AutoZWJ: " + get_project_summary()).c_str());
     }
 }
 
@@ -443,5 +448,5 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     imgui_window_init(g_dll_hinst, host_wnd);
     imgui_window_set_generate_callback(on_generate_from_imgui);
 
-    if (g_logger) g_logger->log(g_logger, L"RPPinEXO plugin registered");
+    if (g_logger) g_logger->log(g_logger, L"AutoZWJ plugin registered");
 }
