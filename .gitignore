@@ -1,0 +1,20 @@
+﻿# SDK and references (read-only)
+references/
+aviutl2_sdk/
+tools/
+src/thirdparty/
+
+# Internal state
+.kilo/
+
+# Build artifacts
+dist/
+build/
+build-rel/
+
+# AviUtl2 CLI
+/.aviutl2-cli
+/release
+
+# Private
+priv/
