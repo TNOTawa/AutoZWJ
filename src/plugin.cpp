@@ -42,6 +42,31 @@ std::string cp932_to_utf8(const std::string& cp932) {
     return wide_to_utf8(wide);
 }
 
+static bool is_valid_utf8(const std::string& s) {
+    size_t i = 0;
+    while (i < s.size()) {
+        unsigned char c = s[i];
+        if (c < 0x80) { i++; continue; }
+        size_t n = 0;
+        if ((c & 0xE0) == 0xC0) n = 2;
+        else if ((c & 0xF0) == 0xE0) n = 3;
+        else if ((c & 0xF8) == 0xF0) n = 4;
+        else return false;
+        if (i + n > s.size()) return false;
+        for (size_t j = 1; j < n; j++) {
+            if ((s[i+j] & 0xC0) != 0x80) return false;
+        }
+        i += n;
+    }
+    return true;
+}
+
+std::string maybe_cp932_to_utf8(const std::string& s) {
+    if (s.empty()) return s;
+    if (is_valid_utf8(s)) return s;
+    return cp932_to_utf8(s);
+}
+
 COMMON_PLUGIN_TABLE common_plugin_table = {
     L"AutoZWJ",
     L"AutoZWJ - RPP/MIDI to AviUtl2 object importer",
@@ -106,7 +131,6 @@ static std::string extract_template_chain(const std::string& alias) {
 
 static std::string apply_template_to_item(const std::string& template_chain,
                                             double soffs, double playrate,
-                                            const std::string& file_path,
                                             int loop) {
     std::string result = template_chain;
     size_t pos;
@@ -125,16 +149,6 @@ static std::string apply_template_to_item(const std::string& template_chain,
         if (end == std::string::npos) end = result.size();
         result.replace(pos, end - pos, u8"再生速度=" + std::to_string((int)(playrate * 100.0)));
         pos++;
-    }
-
-    pos = 0;
-    if (!file_path.empty()) {
-        while ((pos = result.find(u8"ファイル=", pos)) != std::string::npos) {
-            size_t end = result.find('\n', pos);
-            if (end == std::string::npos) end = result.size();
-            result.replace(pos, end - pos, u8"ファイル=" + file_path);
-            pos++;
-        }
     }
 
     pos = 0;
@@ -199,6 +213,12 @@ static void on_generate_from_imgui() {
 
         for (size_t ti = 0; ti < tracks.size(); ti++) {
             if (!tracks[ti].selected) {
+                while (item_start < objdict.pos.size() && objdict.pos[item_start] != -1.0) item_start++;
+                if (item_start < objdict.pos.size()) item_start++;
+                continue;
+            }
+            // 空轨静默跳过（UI 上保留并允许选中，但生成时忽略）
+            if (tracks[ti].count <= 0) {
                 while (item_start < objdict.pos.size() && objdict.pos[item_start] != -1.0) item_start++;
                 if (item_start < objdict.pos.size()) item_start++;
                 continue;
@@ -278,7 +298,7 @@ static void on_generate_from_imgui() {
                 if (fileidx >= 0 && fileidx < (int)objdict.filelist.size())
                     file_path = objdict.filelist[fileidx];
 
-                std::string chain = apply_template_to_item(gs->template_chain, soffs, playrate, file_path, loop);
+                std::string chain = apply_template_to_item(gs->template_chain, soffs, playrate, loop);
 
                 int par = (bfidx_global + item_count_global) % 2;
 
@@ -372,12 +392,7 @@ static void on_generate_from_imgui() {
 
 static void on_select_project(EDIT_SECTION* edit) {
     update_scene_from_edit(edit);
-    show_file_picker(GetActiveWindow(), [](const std::wstring& path) {
-        if (parse_project_file(path)) {
-            if (g_logger)
-                g_logger->log(g_logger, (L"AutoZWJ: " + get_project_summary()).c_str());
-        }
-    });
+    imgui_window_show_import_page();
 }
 
 static void on_open_config(EDIT_SECTION* edit) {
@@ -405,7 +420,7 @@ static void on_open_config(EDIT_SECTION* edit) {
     g_project_state.template_layer = lf.layer;
 
     if (!g_project_state.has_data) {
-        on_select_project(edit);
+        imgui_window_show_import_page();
         return;
     }
     imgui_window_show();
@@ -438,9 +453,9 @@ void sync_scene_info() {
 EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     g_dll_hinst = GetModuleHandle(nullptr);
 
-    host->register_layer_menu(L"选择音频工程...", on_select_project);
-    host->register_object_menu(L"配置导入...", on_open_config);
-    host->register_file_drop_handler(L"RPP/MIDI Input", L"*.rpp;*.mid", on_file_drop);
+    host->register_layer_menu(L"[AutoZWJ] 选择音频工程...", on_select_project);
+    host->register_object_menu(L"[AutoZWJ] 配置导入...", on_open_config);
+    host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI Input", L"*.rpp;*.mid", on_file_drop);
 
     g_edit_handle = host->create_edit_handle();
 

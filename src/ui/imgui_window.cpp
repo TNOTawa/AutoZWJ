@@ -3,6 +3,7 @@
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 #include "ui_components.h"
+#include "ui/ui_config.h"
 #include "plugin.h"
 #include <d3d11.h>
 #include <cstdio>
@@ -23,6 +24,8 @@ static bool g_initialized = false;
 static bool g_rendering = false;
 static void (*g_on_generate)() = nullptr;
 static WNDCLASSEXW g_wc = {};
+ImFont* g_font_normal = nullptr;
+ImFont* g_font_bold = nullptr;
 
 #define TIMER_RENDER 1
 
@@ -126,30 +129,16 @@ static void render_frame() {
     ImGui::Begin("AutoZWJ_Main", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_MenuBar);
 
-    render_header_panel();
-    ImGui::Separator();
+    render_nav_bar();
 
-    float avail_h = ImGui::GetContentRegionAvail().y - 50;
-    float left_w = ImGui::GetContentRegionAvail().x * 0.55f;
-
-    ImGui::Columns(2, "main_columns", false);
-    ImGui::SetColumnWidth(0, left_w);
-
-    ImGui::BeginChild("ConfigLeft", ImVec2(0, avail_h), true);
-    render_track_tree();
-    ImGui::EndChild();
-
-    ImGui::NextColumn();
-
-    ImGui::BeginChild("ConfigRight", ImVec2(0, avail_h), true);
-    render_config_panel();
-    ImGui::EndChild();
-
-    ImGui::Columns(1);
-
-    render_action_bar();
+    if (g_current_page == AppPage::Import) {
+        render_import_page();
+    } else {
+        render_config_page();
+    }
 
     ImGui::End();
     ImGui::Render();
@@ -232,41 +221,56 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
     io.IniFilename = nullptr;
 
     {
-        const char* cjk_fonts[] = {
-            "C:\\Windows\\Fonts\\msyh.ttc",
-            "C:\\Windows\\Fonts\\msyhbd.ttc",
-            "C:\\Windows\\Fonts\\simsun.ttc",
-            "C:\\Windows\\Fonts\\msgothic.ttc",
-            "C:\\Windows\\Fonts\\meiryo.ttc",
-            "C:\\Windows\\Fonts\\yugothic.ttf",
+        static const ImWchar ranges[] = {
+            0x0020, 0x00FF,
+            0x2000, 0x206F,
+            0x3000, 0x30FF,
+            0x31F0, 0x31FF,
+            0xFF00, 0xFFEF,
+            0x4E00, 0x9FFF,
+            0,
         };
 
-        ImFont* font = nullptr;
-        for (auto path : cjk_fonts) {
-            FILE* fp = fopen(path, "rb");
-            if (fp) { fclose(fp);
-                static const ImWchar ranges[] = {
-                    0x0020, 0x00FF,
-                    0x2000, 0x206F,
-                    0x3000, 0x30FF,
-                    0x31F0, 0x31FF,
-                    0xFF00, 0xFFEF,
-                    0x4E00, 0x9FFF,
-                    0,
-                };
-                font = io.Fonts->AddFontFromFileTTF(path, 16.0f, nullptr, ranges);
-                if (font) {
-                    io.Fonts->Build();
-                    break;
-                }
+        struct FontPair {
+            const char* normal;
+            const char* bold;
+        };
+
+        FontPair candidates[] = {
+            {"C:\\Windows\\Fonts\\msyh.ttc",   "C:\\Windows\\Fonts\\msyhbd.ttc"},
+            {"C:\\Windows\\Fonts\\segoeui.ttf", "C:\\Windows\\Fonts\\segoeuib.ttf"},
+            {"C:\\Windows\\Fonts\\YuGothR.ttc", "C:\\Windows\\Fonts\\YuGothB.ttc"},
+        };
+
+        for (auto& cand : candidates) {
+            FILE* fp = fopen(cand.normal, "rb");
+            if (!fp) continue;
+            fclose(fp);
+
+            g_font_normal = io.Fonts->AddFontFromFileTTF(cand.normal, UI::FONT_SIZE, nullptr, ranges);
+            if (!g_font_normal) continue;
+
+            fp = fopen(cand.bold, "rb");
+            if (fp) {
+                fclose(fp);
+                g_font_bold = io.Fonts->AddFontFromFileTTF(cand.bold, UI::FONT_SIZE, nullptr, ranges);
             }
+            break;
         }
 
-        if (!font) {
-            io.Fonts->AddFontDefault();
+        if (!g_font_normal) {
+            g_font_normal = io.Fonts->AddFontDefault();
             io.Fonts->Build();
         }
+
+        if (!g_font_bold) {
+            g_font_bold = g_font_normal;
+        }
     }
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ItemSpacing.y = UI::ITEM_SPACING_Y;
+    style.FramePadding.y = UI::FRAME_PADDING_Y;
 
     ImGui::StyleColorsDark();
 
@@ -284,6 +288,18 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
 void imgui_window_show() {
     if (!g_initialized) return;
     if (!g_scene_info.valid) sync_scene_info();
+    g_current_page = AppPage::Config;
+    ShowWindow(g_imgui_hwnd, SW_SHOW);
+    SetForegroundWindow(g_imgui_hwnd);
+    g_visible = true;
+    InvalidateRect(g_imgui_hwnd, nullptr, FALSE);
+    render_frame();
+}
+
+void imgui_window_show_import_page() {
+    if (!g_initialized) return;
+    if (!g_scene_info.valid) sync_scene_info();
+    g_current_page = AppPage::Import;
     ShowWindow(g_imgui_hwnd, SW_SHOW);
     SetForegroundWindow(g_imgui_hwnd);
     g_visible = true;

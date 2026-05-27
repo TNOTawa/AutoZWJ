@@ -3,7 +3,7 @@
 #include <commdlg.h>
 #include <functional>
 
-void show_file_picker(HWND parent, std::function<void(const std::wstring&)> on_selected) {
+void show_file_picker(HWND parent, std::function<void(const std::wstring&)> on_selected, const std::wstring& initial_dir) {
     wchar_t path_buffer[MAX_PATH * 2] = {};
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
@@ -12,6 +12,9 @@ void show_file_picker(HWND parent, std::function<void(const std::wstring&)> on_s
     ofn.lpstrFile = path_buffer;
     ofn.nMaxFile = MAX_PATH * 2;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST;
+    if (!initial_dir.empty()) {
+        ofn.lpstrInitialDir = initial_dir.c_str();
+    }
     if (GetOpenFileNameW(&ofn)) {
         if (on_selected) on_selected(path_buffer);
     }

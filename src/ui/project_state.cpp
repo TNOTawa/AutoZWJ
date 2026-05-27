@@ -31,6 +31,8 @@ static void load_config_from_project_file(EDIT_HANDLE* edit) {
         if (val) cfg->is_ex_set = std::atoi(val);
         val = pf->get_param_string("rppinexo.exedit_lang");
         if (val) cfg->exedit_lang = val;
+        val = pf->get_param_string("rppinexo.last_directory");
+        if (val) g_project_state.last_directory = utf8_to_wide(val);
     });
 }
 
@@ -50,6 +52,7 @@ void save_config_to_project_file(EDIT_HANDLE* edit, const OutputConfig& cfg) {
         pf->set_param_string("rppinexo.clipping", std::to_string(cfg->clipping).c_str());
         pf->set_param_string("rppinexo.is_ex_set", std::to_string(cfg->is_ex_set).c_str());
         pf->set_param_string("rppinexo.exedit_lang", cfg->exedit_lang.c_str());
+        pf->set_param_string("rppinexo.last_directory", wide_to_utf8(g_project_state.last_directory).c_str());
     });
 }
 

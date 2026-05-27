@@ -55,24 +55,27 @@ static std::string make_absolute(const std::string& rpp_dir, const std::string& 
 }
 
 static std::string read_text_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) return "";
-    f.seekg(0, std::ios::end);
-    std::streamsize sz = f.tellg();
-    f.seekg(0, std::ios::beg);
-    if (sz <= 0) return "";
-    std::string buf(sz, '\0');
-    f.read(&buf[0], sz);
-    buf.resize(f.gcount());
+    std::wstring wpath = utf8_to_wide(path);
+    HANDLE hFile = CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return "";
+    LARGE_INTEGER size;
+    if (!GetFileSizeEx(hFile, &size) || size.QuadPart <= 0) { CloseHandle(hFile); return ""; }
+    std::string buf((size_t)size.QuadPart, '\0');
+    DWORD read = 0;
+    BOOL ok = ReadFile(hFile, &buf[0], (DWORD)size.QuadPart, &read, nullptr);
+    CloseHandle(hFile);
+    if (!ok || read != (DWORD)size.QuadPart) return "";
+    buf.resize(read);
     return buf;
 }
 
 static std::vector<std::string> read_lines(const std::string& path) {
     std::vector<std::string> lines;
-    std::ifstream f(path);
-    if (!f) return lines;
+    std::string buf = read_text_file(path);
+    if (buf.empty()) return lines;
+    std::istringstream iss(buf);
     std::string line;
-    while (std::getline(f, line)) {
+    while (std::getline(iss, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         lines.push_back(line);
     }
@@ -126,6 +129,7 @@ bool parse_rpp(const std::string& path, ObjDict& objdict,
     std::string track_name;
     int index = 0;
     int num_lines = (int)lines.size();
+    int current_depth = 0;
 
     while (index < num_lines) {
         auto parts = split_line(lines[index]);
@@ -153,22 +157,29 @@ bool parse_rpp(const std::string& path, ObjDict& objdict,
             }
 
             TrackNode node;
-            node.name = utf8_to_wide(cp932_to_utf8(track_name));
+            node.name = utf8_to_wide(maybe_cp932_to_utf8(track_name));
             node.number = track_index;
             node.index = (int)objdict.pos.size();
             node.selected = true;
+            node.depth = current_depth;
 
-            bool is_bus_start = false;
-            int bus_depth = 0;
+            bool is_folder_start = false;
+            bool is_folder_end = false;
             for (int k = index + 2; k < index + 14 && k < num_lines; k++) {
                 auto sp = split_line(lines[k]);
                 if (sp.size() >= 2 && sp[0] == "ISBUS") {
-                    if (sp[1] == "1") { is_bus_start = true; if (sp.size() >= 3) bus_depth = std::atoi(sp[2].c_str()); }
-                    else if (sp[1] == "2") { node.is_bus = true; if (sp.size() >= 3) bus_depth = -(std::atoi(sp[2].c_str()) + 1); }
+                    if (sp[1] == "1") { is_folder_start = true; }
+                    else if (sp[1] == "2") { is_folder_end = true; }
                     break;
                 }
             }
-            node.is_bus = is_bus_start;
+            node.is_bus = is_folder_start;
+
+            if (is_folder_start) {
+                current_depth++;
+            } else if (is_folder_end && current_depth > 0) {
+                current_depth--;
+            }
 
             if (sel_tracks && !sel_tracks->empty()) {
                 node.selected = std::find(sel_tracks->begin(), sel_tracks->end(), track_index) != sel_tracks->end();
@@ -386,13 +397,7 @@ bool parse_rpp(const std::string& path, ObjDict& objdict,
             tracks[current_track].count = (int)objdict.pos.size() - tracks[current_track].index;
         }
 
-        tracks.erase(std::remove_if(tracks.begin(), tracks.end(),
-            [](const TrackNode& n) { return n.count <= 0; }), tracks.end());
-
-        for (int i = 1; i < (int)tracks.size(); i++) {
-            if (tracks[i].index < tracks[i-1].index + tracks[i-1].count)
-                tracks[i].index = tracks[i-1].index + tracks[i-1].count;
-        }
+        // 空轨保留，由 UI 灰色显示、生成逻辑静默跳过
     }
 
     return true;

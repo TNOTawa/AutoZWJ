@@ -31,6 +31,7 @@ struct TrackNode {
     int index = 0;
     int count = 0;
     bool is_bus = false;
+    int depth = 0;
     bool solo = false;
     bool mute = false;
     bool selected = true;
@@ -76,6 +77,7 @@ struct ProjectState {
     bool has_data = false;
     std::wstring file_path;
     std::wstring file_name;
+    std::wstring last_directory;
     ObjDict objdict;
     std::vector<TrackNode> tracks;
     OutputConfig config;
@@ -103,6 +105,7 @@ extern HINSTANCE g_dll_hinst;
 std::wstring utf8_to_wide(const std::string& utf8);
 std::string wide_to_utf8(const std::wstring& wide);
 std::string cp932_to_utf8(const std::string& cp932);
+std::string maybe_cp932_to_utf8(const std::string& s);
 
 bool parse_project_file(const std::wstring& file_path);
 std::wstring get_project_summary();

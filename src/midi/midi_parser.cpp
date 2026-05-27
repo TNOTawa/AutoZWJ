@@ -50,17 +50,16 @@ struct MidiTrackData {
 
 bool parse_midi(const std::string& path, ObjDict& objdict,
                 std::vector<TrackNode>& tracks, std::vector<std::string>& file_paths) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) return false;
-
-    f.seekg(0, std::ios::end);
-    std::streamsize sz = f.tellg();
-    f.seekg(0, std::ios::beg);
-    if (sz <= 0) return false;
-
-    std::vector<uint8_t> data(sz);
-    f.read(reinterpret_cast<char*>(data.data()), sz);
-    f.close();
+    std::wstring wpath = utf8_to_wide(path);
+    HANDLE hFile = CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER size;
+    if (!GetFileSizeEx(hFile, &size) || size.QuadPart <= 0) { CloseHandle(hFile); return false; }
+    std::vector<uint8_t> data((size_t)size.QuadPart);
+    DWORD read = 0;
+    BOOL ok = ReadFile(hFile, data.data(), (DWORD)size.QuadPart, &read, nullptr);
+    CloseHandle(hFile);
+    if (!ok || read != (DWORD)size.QuadPart) return false;
 
     const uint8_t* p = data.data();
     const uint8_t* end = p + data.size();
