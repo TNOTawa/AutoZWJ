@@ -162,6 +162,32 @@ static std::string apply_template_to_item(const std::string& template_chain,
     return result;
 }
 
+static int assign_layer_impl(double obj_fp, double bf, std::vector<double>& target, int strategy) {
+    if (strategy == 0) {
+        for (size_t k = 0; k < target.size(); k++) {
+            if (target[k] >= obj_fp) {
+                if (k == target.size() - 1) { target.push_back(bf); return (int)k + 1; }
+            } else { target[k] = bf; return (int)k; }
+        }
+        if (target.empty()) { target.push_back(bf); return 0; }
+    } else {
+        bool all_free = true;
+        for (double b : target) {
+            if (b >= obj_fp) { all_free = false; break; }
+        }
+        if (all_free && !target.empty()) {
+            target.resize(1);
+            target[0] = bf;
+            return 0;
+        } else {
+            int new_layer = (int)target.size();
+            target.push_back(bf);
+            return new_layer;
+        }
+    }
+    return 0;
+}
+
 static void on_generate_from_imgui() {
     if (!g_project_state.has_data) {
         if (g_logger) g_logger->warn(g_logger, L"AutoZWJ: 未加载音频工程");
@@ -271,8 +297,7 @@ static void on_generate_from_imgui() {
 
                             double bf = obj_fp + obj_fl - 1;
 
-                            bool stretch_next = (config.duration_mode == 1) ||
-                                                (config.gap_mode == 0 && config.duration_mode != 2);
+                            bool stretch_next = (config.sync_mode == 1);
                             if (stretch_next && next_fp > 0) {
                                 double rounded_bf = sur_round(bf);
                                 double rounded_next = sur_round(next_fp);
@@ -282,12 +307,16 @@ static void on_generate_from_imgui() {
                             int sf = (int)sur_round(obj_fp);
                             if (sf < 1) sf = 1;
                             int ef;
-                            if (config.duration_mode == 2) {
+                            bool use_fixed = (config.sync_mode == 2 || config.sync_mode == 4);
+                            if (use_fixed) {
                                 ef = sf + config.fixed_duration_frames - 1;
                             } else {
                                 ef = (int)sur_round(bf);
                                 if (ef <= sf) ef = sf + 1;
                             }
+
+                            // 同步 bf 为实际整数结束帧，用于层分配时避免浮点误差导致重叠误判
+                            bf = (double)ef;
 
                             std::string file_path;
                             int fileidx = objdict.fileidx[k];
@@ -298,26 +327,33 @@ static void on_generate_from_imgui() {
                                 objdict.loop[k], objdict.playrate[k], objdict.soffs[k], fileidx, file_path});
                         }
 
-                        // --- 2. gap_mode == 2：转换为间隙 intervals ---
-                        if (config.gap_mode == 2) {
+                        bool is_gap_only = (config.sync_mode == 3 || config.sync_mode == 4);
+                        // --- 2. 仅在间隙生成模式：转换为间隙 intervals ---
+                        if (is_gap_only) {
                             std::vector<Interval> gaps;
                             for (size_t g = 0; g + 1 < intervals.size(); g++) {
                                 int gap_sf = intervals[g].ef + 1;
                                 int gap_ef = intervals[g + 1].sf - 1;
                                 if (gap_ef >= gap_sf) {
                                     double gap_fp = gap_sf;
-                                    double gap_bf = gap_ef;
-                                    gaps.push_back({intervals[g].idx, gap_fp, gap_bf, -999.0,
-                                        gap_sf, gap_ef, 0, 1.0, 0.0, -1, ""});
+                                    int gap_ef_final;
+                                    if (config.sync_mode == 4) {
+                                        gap_ef_final = gap_sf + config.fixed_duration_frames - 1;
+                                        if (gap_ef_final > gap_ef) gap_ef_final = gap_ef;
+                                    } else {
+                                        gap_ef_final = gap_ef;
+                                    }
+                                    gaps.push_back({intervals[g].idx, gap_fp, (double)gap_ef_final, -999.0,
+                                        gap_sf, gap_ef_final, 0, 1.0, 0.0, -1, ""});
                                 }
                             }
                             intervals = std::move(gaps);
                         }
 
-                        // --- 3. 预计算层分配（用于过滤） ---
+                        // --- 3. 预计算层分配（用于过滤与反转） ---
                         std::vector<int> pre_layers;
                         int max_layer = 0;
-                        if (config.track_filter_mode != 0) {
+                        if (config.track_filter_mode != 0 || config.reverse_layer_order) {
                             auto popt = opt_layer;
                             auto popt2 = opt_layer2;
                             int pcount = item_count_global;
@@ -335,24 +371,8 @@ static void on_generate_from_imgui() {
                                 pcount++;
                                 pbpos = iv.sf;
 
-                                int dl = 0;
-                                if (config.even_only && par == 1) {
-                                    for (size_t k = 0; k < popt2.size(); k++) {
-                                        dl = (int)k;
-                                        if (popt2[k] >= iv.obj_fp) {
-                                            if (k == popt2.size() - 1) { popt2.push_back(iv.bf); dl++; break; }
-                                        } else { popt2[k] = iv.bf; break; }
-                                    }
-                                    if (popt2.empty()) popt2.push_back(iv.bf);
-                                } else {
-                                    for (size_t k = 0; k < popt.size(); k++) {
-                                        dl = (int)k;
-                                        if (popt[k] >= iv.obj_fp) {
-                                            if (k == popt.size() - 1) { popt.push_back(iv.bf); dl++; break; }
-                                        } else { popt[k] = iv.bf; break; }
-                                    }
-                                    if (popt.empty()) popt.push_back(iv.bf);
-                                }
+                                auto& ptarget = (config.even_only && par == 1) ? popt2 : popt;
+                                int dl = assign_layer_impl((double)iv.sf, (double)iv.ef, ptarget, config.layer_strategy);
                                 pre_layers.push_back(dl);
                             }
                             if (!pre_layers.empty()) {
@@ -382,24 +402,13 @@ static void on_generate_from_imgui() {
 
                             bpos_global = iv.sf;
 
-                            // 层分配（始终更新 opt_layer 以保持状态一致）
-                            int add_layer = 0;
-                            if (config.even_only && par == 1) {
-                                for (size_t k = 0; k < opt_layer2.size(); k++) {
-                                    add_layer = (int)k;
-                                    if (opt_layer2[k] >= iv.obj_fp) {
-                                        if (k == opt_layer2.size() - 1) { opt_layer2.push_back(iv.bf); add_layer++; break; }
-                                    } else { opt_layer2[k] = iv.bf; break; }
-                                }
-                                if (opt_layer2.empty()) opt_layer2.push_back(iv.bf);
-                            } else {
-                                for (size_t k = 0; k < opt_layer.size(); k++) {
-                                    add_layer = (int)k;
-                                    if (opt_layer[k] >= iv.obj_fp) {
-                                        if (k == opt_layer.size() - 1) { opt_layer.push_back(iv.bf); add_layer++; break; }
-                                    } else { opt_layer[k] = iv.bf; break; }
-                                }
-                                if (opt_layer.empty()) opt_layer.push_back(iv.bf);
+                            // 层分配（使用整数帧避免浮点精度导致的重叠误判）
+                            auto& target = (config.even_only && par == 1) ? opt_layer2 : opt_layer;
+                            int add_layer = assign_layer_impl((double)iv.sf, (double)iv.ef, target, config.layer_strategy);
+
+                            // 反转轨道顺序
+                            if (config.reverse_layer_order) {
+                                add_layer = max_layer - add_layer;
                             }
 
                             // 过滤
@@ -466,7 +475,7 @@ static void on_generate_from_imgui() {
                                     obj_name = utf8_to_wide(iv.file_path);
                                     size_t sep = obj_name.find_last_of(L'\\');
                                     if (sep != std::wstring::npos) obj_name = obj_name.substr(sep + 1);
-                                } else if (config.gap_mode == 2) {
+                                } else if (is_gap_only) {
                                     obj_name = L"Gap " + std::to_wstring(item_count_global);
                                 } else {
                                     obj_name = L"Item " + std::to_wstring(item_count_global);
