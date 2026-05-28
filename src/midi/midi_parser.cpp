@@ -32,6 +32,9 @@ struct PendingNote {
     uint8_t channel;
     double start_sec;
     uint8_t velocity;
+    double volume = -1.0;      // CC7 at note-on time, -1 = 未设置
+    double pan = -1.0;         // CC10 at note-on time, -1 = 未设置
+    double pitch_bend = 0.0;   // PitchBend at note-on time, 0 = 中心
 };
 
 struct MidiEvent {
@@ -41,6 +44,9 @@ struct MidiEvent {
     double velocity;
     int track;
     std::string lyric;
+    double volume = -1.0;
+    double pan = -1.0;
+    double pitch_bend = 0.0;
 };
 
 struct MidiTrackData {
@@ -94,15 +100,35 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
         double abs_time_sec = 0.0;
         uint8_t running_status = 0;
 
+        // per-channel CC 状态，MIDI 标准 power-on 默认: volume=100, pan=64
+        double ch_volume[16];
+        double ch_pan[16];
+        double ch_pitch_bend[16];
+        for (int i = 0; i < 16; i++) {
+            ch_volume[i] = -1.0;   // -1 表示该 track 尚未遇到 CC7
+            ch_pan[i] = -1.0;      // -1 表示该 track 尚未遇到 CC10
+            ch_pitch_bend[i] = 0.0;
+        }
+
+        bool need_delta = true;
         while (p < track_end) {
-            uint32_t delta = read_varlen(p, track_end);
-            if (p >= track_end) break;
-            abs_time_sec += delta * usec_per_tick / 1000000.0;
+            if (need_delta) {
+                uint32_t delta = read_varlen(p, track_end);
+                if (p >= track_end) break;
+                abs_time_sec += delta * usec_per_tick / 1000000.0;
+            }
+            need_delta = true;
 
             uint8_t byte = *p;
             uint8_t status;
             if (byte < 0x80) {
-                if (running_status == 0) { p++; continue; }
+                if (running_status == 0) {
+                    // 孤立 data byte：无前置 running status，跳过并继续解析
+                    // 不读取新的 delta time，直接尝试解析下一个事件
+                    p++;
+                    need_delta = false;
+                    continue;
+                }
                 status = running_status;
             } else {
                 status = *p++;
@@ -147,6 +173,9 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
                         pn.channel = channel;
                         pn.start_sec = abs_time_sec;
                         pn.velocity = velocity;
+                        pn.volume = ch_volume[channel];
+                        pn.pan = ch_pan[channel];
+                        pn.pitch_bend = ch_pitch_bend[channel];
                         pending.push_back(pn);
                     } else {
                         for (size_t i = 0; i < pending.size(); i++) {
@@ -157,6 +186,9 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
                                 evt.note_number = (int)note;
                                 evt.velocity = (double)pending[i].velocity;
                                 evt.track = track_idx + 1;
+                                evt.volume = pending[i].volume;
+                                evt.pan = pending[i].pan;
+                                evt.pitch_bend = pending[i].pitch_bend;
                                 trk.events.push_back(evt);
                                 has_any_note = true;
                                 pending.erase(pending.begin() + i);
@@ -167,13 +199,27 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
                 } else if (msg_type == 0xA) {
                     if (p + 2 <= track_end) p += 2; else break;
                 } else if (msg_type == 0xB) {
-                    if (p + 2 <= track_end) p += 2; else break;
+                    if (p + 2 <= track_end) {
+                        uint8_t cc_num = *p++;
+                        uint8_t cc_val = *p++;
+                        if (cc_num == 7) ch_volume[channel] = (double)cc_val;
+                        else if (cc_num == 10) ch_pan[channel] = (double)cc_val;
+                    } else {
+                        break;
+                    }
                 } else if (msg_type == 0xC) {
                     if (p + 1 <= track_end) p += 1; else break;
                 } else if (msg_type == 0xD) {
                     if (p + 1 <= track_end) p += 1; else break;
                 } else if (msg_type == 0xE) {
-                    if (p + 2 <= track_end) p += 2; else break;
+                    if (p + 2 <= track_end) {
+                        uint8_t lsb = *p++;
+                        uint8_t msb = *p++;
+                        int raw = ((int)msb << 7) | (int)lsb;
+                        ch_pitch_bend[channel] = (double)(raw - 8192);
+                    } else {
+                        break;
+                    }
                 }
             }
         }
@@ -186,6 +232,9 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
             evt.note_number = (int)pn.note;
             evt.velocity = (double)pn.velocity;
             evt.track = track_idx + 1;
+            evt.volume = pn.volume;
+            evt.pan = pn.pan;
+            evt.pitch_bend = pn.pitch_bend;
             trk.events.push_back(evt);
             has_any_note = true;
         }
@@ -237,6 +286,9 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
             objdict.midi_note.push_back(ev.note_number);
             objdict.midi_lyric.push_back(ev.lyric);
             objdict.midi_len.push_back(ev.length_sec);
+            objdict.midi_volume.push_back(ev.volume);
+            objdict.midi_pan.push_back(ev.pan);
+            objdict.midi_pitch_bend.push_back(ev.pitch_bend);
         }
 
         if (ti < midi_tracks.size() - 1) {

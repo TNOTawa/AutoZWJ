@@ -472,8 +472,35 @@ void render_config_panel() {
 
     ImGui::Checkbox(u8"偶数项换行", &cfg.even_only);
     ImGui::Checkbox(u8"无节拍同步", &cfg.beatless_sync);
-    ImGui::Checkbox(u8"填充间隙", &cfg.no_gap);
     ImGui::Checkbox(u8"向上取整帧", &cfg.use_round_up);
+
+    ImGui::Spacing();
+    ImGui::Text(u8"物件与音符同步");
+    ImGui::Separator();
+
+    static const char* duration_labels[] = { u8"与音符对齐", u8"拉伸到下一音符", u8"拉伸到固定值" };
+    ImGui::Combo(u8"物件时长", &cfg.duration_mode, duration_labels, 3);
+    if (cfg.duration_mode == 2) {
+        ImGui::Indent(16);
+        ImGui::InputInt(u8"固定帧数", &cfg.fixed_duration_frames, 1, 10);
+        if (cfg.fixed_duration_frames < 1) cfg.fixed_duration_frames = 1;
+        ImGui::Unindent(16);
+    }
+
+    static const char* gap_labels[] = { u8"填充间隙", u8"不填充间隙", u8"仅在间隙生成" };
+    ImGui::Combo(u8"间隙模式", &cfg.gap_mode, gap_labels, 3);
+
+    static const char* track_filter_labels[] = { u8"全部独立", u8"仅取第N轨", u8"仅取倒数第N轨" };
+    ImGui::Combo(u8"多音符策略", &cfg.track_filter_mode, track_filter_labels, 3);
+    if (cfg.track_filter_mode != 0) {
+        ImGui::Indent(16);
+        ImGui::InputInt(u8"N", &cfg.track_filter_n, 1, 1);
+        if (cfg.track_filter_n < 1) cfg.track_filter_n = 1;
+        ImGui::Unindent(16);
+    }
+
+    // 向后兼容：同步旧 no_gap 字段
+    cfg.no_gap = (cfg.gap_mode == 0) || (cfg.duration_mode == 1);
 }
 
 // ---------------------------------------------------------------------------

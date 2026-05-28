@@ -21,6 +21,9 @@ struct ObjDict {
     std::vector<int>    midi_note;
     std::vector<std::string> midi_lyric;
     std::vector<double> midi_len;
+    std::vector<double> midi_volume;     // CC7, 0-127, -1 = 未设置
+    std::vector<double> midi_pan;        // CC10, 0-127 (64=center), -1 = 未设置
+    std::vector<double> midi_pitch_bend; // -8192~8191, 0 = 中心
     double bpm = 120.0;
     int track_count = 0;
 };
@@ -58,6 +61,13 @@ struct OutputConfig {
     std::string exedit_lang = "ja";
     std::vector<std::string> selected_effects;
     std::map<std::string, std::map<std::string, std::string>> effect_overrides;
+
+    // Phase 5: 物件与音符同步
+    int duration_mode = 0;      // 0=与音符对齐, 1=拉伸到下一音符, 2=拉伸到固定值
+    int fixed_duration_frames = 30;
+    int gap_mode = 0;           // 0=填充间隙, 1=不填充间隙, 2=仅在间隙生成
+    int track_filter_mode = 0;  // 0=全部独立, 1=仅取第N轨, 2=仅取倒数第N轨
+    int track_filter_n = 1;
 };
 
 struct EffectParam {
