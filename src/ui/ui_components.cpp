@@ -372,6 +372,10 @@ void render_import_page() {
     if (ImGui::Button(u8"确认导入", ImVec2(140, 35))) {
         if (g_project_state.has_data) {
             if (!g_project_state.template_alias.empty()) {
+                if (g_template_aliases.empty()) {
+                    g_template_aliases.push_back(g_project_state.template_alias);
+                    refresh_template_effects();
+                }
                 g_current_page = AppPage::Config;
             } else {
                 ImGui::OpenPopup(u8"提示");

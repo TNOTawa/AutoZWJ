@@ -121,6 +121,8 @@ std::wstring get_project_summary();
 void save_config_to_project_file(EDIT_HANDLE* edit, const OutputConfig& cfg);
 void sync_scene_info();
 
+std::string extract_template_chain(const std::string& alias);
+
 void select_all_tracks();
 void deselect_all_tracks();
 void invert_track_selection();

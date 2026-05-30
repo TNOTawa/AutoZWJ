@@ -2,6 +2,9 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "ui/ui_config.h"
+#include "plugin.h"
+#include "exo/object_generator.h"
+#include "effect/effect_dict.h"
 #include <cstring>
 #include <map>
 #include <set>
@@ -14,81 +17,56 @@ std::vector<PresetEntry> g_presets;
 std::string g_highlight_param_id;
 int g_highlight_timer = 0;
 
+std::vector<std::string> g_template_aliases;
+bool g_template_effects_dirty = true;
+
 // ---- 静态状态（持久到会话结束） ----
 static std::vector<bool> s_header_states;
 
-static void push_effect(const char* ja, const char* zh, int idx,
-                        std::initializer_list<std::pair<const char*, const char*>> ps) {
-    ParsedEffect e;
-    e.effect_name = ja;
-    e.effect_name_zh = zh;
-    e.original_index = idx;
-    for (auto& p : ps) e.params.push_back(p);
-    g_template_effects.push_back(e);
-}
-
-void init_mock_template_effects() {
+void refresh_template_effects() {
+    g_template_effects_dirty = false;
     g_template_effects.clear();
-    if (g_current_template_idx == 0) {
-        push_effect(u8"拡大率", u8"缩放率", 0, {
-            {u8"X", "100.0"}, {u8"X.1", "200.0"},
-            {u8"Y", "100.0"}, {u8"Y.1", "150.0"},
-            {u8"拡大率", "100.0"}, {u8"縦横比", "0"}
-        });
-        push_effect(u8"回転", u8"旋转", 1, {
-            {u8"角度", "0.0"}, {u8"中心X", "0.0"}, {u8"中心Y", "0.0"}
-        });
-        push_effect(u8"色調補正", u8"色调校正", 2, {
-            {u8"色相", "0.0"}, {u8"彩度", "0.0"}, {u8"明度", "0.0"}, {u8"コントラスト", "0.0"}
-        });
-    } else if (g_current_template_idx == 1) {
-        push_effect(u8"拡大率", u8"缩放率", 0, {
-            {u8"X", "100.0"}, {u8"X.1", "120.0"}, {u8"Y", "100.0"}, {u8"Y.1", "80.0"},
-            {u8"拡大率", "100.0"}, {u8"縦横比", "0"}
-        });
-        push_effect(u8"回転", u8"旋转", 1, {{u8"角度", "0.0"}, {u8"中心X", "0.0"}, {u8"中心Y", "0.0"}});
-        push_effect(u8"反転", u8"反转", 2, {{u8"左右反転", "0"}, {u8"上下反転", "0"}});
-        push_effect(u8"色調補正", u8"色调校正", 3, {
-            {u8"色相", "0.0"}, {u8"彩度", "0.0"}, {u8"明度", "0.0"}, {u8"コントラスト", "0.0"}
-        });
-        push_effect(u8"ぼかし", u8"模糊", 4, {{u8"範囲", "5.0"}, {u8"透明度", "100.0"}});
-        push_effect(u8"縁取り", u8"描边", 5, {{u8"太さ", "3.0"}, {u8"色", "0xFFFFFF"}, {u8"透明度", "100.0"}});
-        push_effect(u8"クロマキー", u8"色键", 6, {{u8"色", "0x00FF00"}, {u8"範囲", "30.0"}, {u8"境界", "10.0"}});
-        push_effect(u8"ライト", u8"光照", 7, {{u8"強さ", "50.0"}, {u8"方向", "45.0"}, {u8"色", "0xFFFFFF"}});
-        push_effect(u8"シャドウ", u8"阴影", 8, {{u8"距離", "10.0"}, {u8"方向", "135.0"}, {u8"透明度", "50.0"}});
-        push_effect(u8"グロー", u8"发光", 9, {{u8"強さ", "20.0"}, {u8"色", "0xFFFF00"}, {u8"範囲", "10.0"}});
-        push_effect(u8"ブラー", u8"高斯模糊", 10, {{u8"範囲", "8.0"}, {u8"品質", "3"}});
-        push_effect(u8"ノイズ", u8"噪点", 11, {{u8"強さ", "15.0"}, {u8"種類", "0"}, {u8"透明度", "30.0"}});
-        push_effect(u8"モザイク", u8"马赛克", 12, {{u8"サイズ", "8.0"}, {u8"透明度", "100.0"}});
-        push_effect(u8"トリミング", u8"裁剪", 13, {
-            {u8"左", "0"}, {u8"右", "0"}, {u8"上", "0"}, {u8"下", "0"}
-        });
-        push_effect(u8"クリッピング", u8"裁切", 14, {{u8"有効", "1"}, {u8"範囲", "100.0"}});
-        push_effect(u8"アニメーション効果", u8"动画效果", 15, {
-            {u8"種類", "0"}, {u8"強さ", "50.0"}, {u8"速度", "1.0"}, {u8"ループ", "0"}
-        });
-        push_effect(u8"拡張編集", u8"扩展编辑", 16, {
-            {u8"X", "0.0"}, {u8"Y", "0.0"}, {u8"Z", "0.0"}, {u8"拡大率", "100.0"}, {u8"透明度", "100.0"}
-        });
-        push_effect(u8"カスタムオブジェクト", u8"自定义物件", 17, {
-            {u8"スクリプト", "default.lua"}, {u8"幅", "100.0"}, {u8"高さ", "100.0"}, {u8"FPS", "60"}
-        });
-    } else {
-        push_effect(u8"拡大率", u8"缩放率", 0, {
-            {u8"X", "100.0"}, {u8"Y", "100.0"}, {u8"拡大率", "100.0"}
-        });
-    }
+    g_param_bakes.clear();
+    s_header_states.clear();
+
+    if (g_current_template_idx < 0 || g_current_template_idx >= (int)g_template_aliases.size())
+        return;
+
+    std::string chain = extract_template_chain(g_template_aliases[g_current_template_idx]);
+    if (chain.empty()) return;
+
+    g_template_effects = parse_effect_chain(chain);
 }
 
-void init_mock_presets() {
+void sync_presets_from_config() {
+    OutputConfig& cfg = g_project_state.config;
+
+    std::map<std::string, int> saved_positions;
+    for (const auto& p : g_presets) {
+        if (p.active) {
+            saved_positions[p.display_name] = p.position;
+        }
+    }
+
     g_presets.clear();
-    PresetEntry p;
-    p.display_name = u8"左右翻转";
-    p.effect_block = "[0.N]\neffect.name=反転\n左右反転=1\n";
-    p.position = -1;
-    p.active = true;
-    p.highlight_target = "flip_config";
-    g_presets.push_back(p);
+
+    if (cfg.alt_flip && cfg.flip_type != FLIP_NONE) {
+        PresetEntry preset;
+        switch (cfg.flip_type) {
+            case FLIP_HORIZONTAL: preset.display_name = u8"左右翻转"; break;
+            case FLIP_VERTICAL:   preset.display_name = u8"上下翻转"; break;
+            case FLIP_CW:         preset.display_name = u8"顺时针旋转"; break;
+            case FLIP_CCW:        preset.display_name = u8"逆时针旋转"; break;
+            default:              preset.display_name = u8"翻转"; break;
+        }
+        preset.effect_block = "";
+        preset.highlight_target = "flip_config";
+
+        auto it = saved_positions.find(preset.display_name);
+        preset.position = (it != saved_positions.end()) ? it->second : -1;
+        preset.active = true;
+        g_presets.push_back(preset);
+    }
 }
 
 static int find_or_create_bake(int effect_index, const std::string& param_name, const std::string& default_val) {
@@ -225,25 +203,45 @@ static float calculate_line_y(float mouse_y, const std::vector<ItemRect>& rects)
 void render_effect_chain_panel() {
     if (g_highlight_timer > 0) g_highlight_timer--;
 
-    // ---- TabBar（无关闭按钮） ----
+    if (g_template_aliases.empty()) {
+        ImGui::TextDisabled(u8"未选择模板物件");
+        return;
+    }
+
+    // 懒加载：需要刷新时解析模板
+    if (g_template_effects_dirty && !g_template_aliases.empty()) {
+        refresh_template_effects();
+    }
+
+    // ---- 同步预设（拖拽过程中跳过以避免干扰） ----
+    if (ImGui::GetDragDropPayload() == nullptr) {
+        sync_presets_from_config();
+    }
+
+    // ---- TabBar（多模板时显示） ----
     bool template_changed = false;
-    if (ImGui::BeginTabBar("Templates")) {
-        for (int i = 0; i < 3; i++) {
-            std::string label = u8"模板" + std::to_string(i + 1);
-            if (ImGui::BeginTabItem(label.c_str())) {
-                if (g_current_template_idx != i) {
-                    g_current_template_idx = i;
-                    template_changed = true;
+    if (g_template_aliases.size() > 1) {
+        if (ImGui::BeginTabBar("Templates")) {
+            for (int i = 0; i < (int)g_template_aliases.size(); i++) {
+                std::string label = u8"模板" + std::to_string(i + 1);
+                if (ImGui::BeginTabItem(label.c_str())) {
+                    if (g_current_template_idx != i) {
+                        g_current_template_idx = i;
+                        template_changed = true;
+                    }
+                    ImGui::EndTabItem();
                 }
-                ImGui::EndTabItem();
             }
+            ImGui::EndTabBar();
         }
-        ImGui::EndTabBar();
     }
     if (template_changed) {
         g_param_bakes.clear();
         s_header_states.clear();
-        init_mock_template_effects();
+        if (g_current_template_idx >= 0 && g_current_template_idx < (int)g_template_aliases.size()) {
+            g_project_state.template_alias = g_template_aliases[g_current_template_idx];
+        }
+        refresh_template_effects();
     }
 
     // ---- 全部展开 / 全部收起 + 已勾选计数（同一行） ----

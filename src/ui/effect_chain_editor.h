@@ -37,9 +37,14 @@ extern std::vector<PresetEntry> g_presets;
 extern std::string g_highlight_param_id;   // 当前需要高亮的参数面板控件 ID
 extern int g_highlight_timer;                // 高亮倒计时（帧数）
 
-// ---- Mock 数据（Stage 1 专用，Stage 2 删除） ----
-void init_mock_template_effects();
-void init_mock_presets();
+// ---- 多模板数据 ----
+extern std::vector<std::string> g_template_aliases;
+extern bool g_template_effects_dirty;
+
+// ---- 函数声明 ----
+std::vector<ParsedEffect> parse_effect_chain(const std::string& alias_chain);
+void refresh_template_effects();
+void sync_presets_from_config();
 
 // ---- 渲染 ----
 void render_effect_chain_panel();

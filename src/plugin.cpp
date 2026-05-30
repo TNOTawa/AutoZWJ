@@ -5,6 +5,7 @@
 #include "effect/effect_dict.h"
 #include "ui/file_picker.h"
 #include "ui/imgui_window.h"
+#include "ui/effect_chain_editor.h"
 #include <algorithm>
 #include <sstream>
 #include <cmath>
@@ -107,7 +108,7 @@ static void update_scene_from_edit(EDIT_SECTION* edit) {
     g_project_state.config.fps_den = info.scale;
 }
 
-static std::string extract_template_chain(const std::string& alias) {
+std::string extract_template_chain(const std::string& alias) {
     size_t pos = alias.find("\n[Object.0]");
     if (pos != std::string::npos) { pos++; }
     else {
@@ -129,9 +130,210 @@ static std::string extract_template_chain(const std::string& alias) {
     return chain;
 }
 
+std::vector<ParsedEffect> parse_effect_chain(const std::string& chain) {
+    std::vector<ParsedEffect> result;
+    size_t pos = 0;
+    int index = 0;
+
+    while (pos < chain.size()) {
+        size_t sec_marker = chain.find("[0.", pos);
+        if (sec_marker == std::string::npos) break;
+
+        size_t bracket_end = chain.find(']', sec_marker);
+        if (bracket_end == std::string::npos) break;
+
+        size_t body_start = bracket_end + 1;
+        if (body_start < chain.size() && chain[body_start] == '\n')
+            body_start++;
+
+        size_t next_marker = chain.find("[0.", body_start);
+
+        ParsedEffect eff;
+        eff.original_index = index++;
+
+        size_t line_start = body_start;
+        bool has_effect_name = false;
+
+        while (line_start < chain.size() && (next_marker == std::string::npos || line_start < next_marker)) {
+            size_t line_end = chain.find('\n', line_start);
+            if (line_end == std::string::npos) line_end = chain.size();
+
+            std::string line = chain.substr(line_start, line_end - line_start);
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+
+            if (!line.empty()) {
+                if (line.find("effect.name=") == 0) {
+                    eff.effect_name = line.substr(12);
+                    has_effect_name = true;
+                } else {
+                    size_t eq = line.find('=');
+                    if (eq != std::string::npos) {
+                        std::string pname = line.substr(0, eq);
+                        std::string pval = line.substr(eq + 1);
+                        eff.params.push_back({pname, pval});
+                    }
+                }
+            }
+            line_start = line_end + 1;
+        }
+
+        if (has_effect_name) {
+            const EffectDef* def = find_effect(eff.effect_name);
+            if (def) eff.effect_name_zh = def->name_zh;
+            result.push_back(std::move(eff));
+        }
+
+        pos = (next_marker == std::string::npos) ? chain.size() : next_marker;
+    }
+
+    return result;
+}
+
+static void inject_param_bakes(std::string& chain, const std::vector<ParamBake>& bakes) {
+    for (const auto& pb : bakes) {
+        if (!pb.active) continue;
+
+        std::string marker = "[0." + std::to_string(pb.effect_index) + "]";
+        size_t sec_pos = chain.find(marker);
+        if (sec_pos == std::string::npos) continue;
+
+        size_t sec_end = chain.find("\n[0.", sec_pos + 1);
+        if (sec_end == std::string::npos) sec_end = chain.size();
+
+        std::string search = "\n" + pb.param_name + "=";
+        size_t param_pos = chain.find(search, sec_pos);
+        if (param_pos == std::string::npos || param_pos >= sec_end) {
+            std::string new_line = "\n" + pb.param_name + "=" + pb.param_value;
+            if (sec_end == chain.size()) {
+                chain += new_line;
+            } else {
+                chain.insert(sec_end, new_line);
+            }
+        } else {
+            size_t line_start = param_pos + 1;
+            size_t line_end = chain.find('\n', line_start);
+            if (line_end == std::string::npos || line_end > sec_end)
+                line_end = sec_end;
+            chain.replace(line_start, line_end - line_start,
+                          pb.param_name + "=" + pb.param_value);
+        }
+    }
+}
+
+static void inject_presets(std::string& chain, const std::vector<PresetEntry>& presets) {
+    struct Injection { int position; std::string block; };
+    std::vector<Injection> injections;
+    for (const auto& p : presets) {
+        if (!p.active) continue;
+        injections.push_back({p.position, p.effect_block});
+    }
+    if (injections.empty()) return;
+
+    std::stable_sort(injections.begin(), injections.end(),
+        [](const Injection& a, const Injection& b) {
+            if (a.position == -1) return false;
+            if (b.position == -1) return true;
+            return a.position < b.position;
+        });
+
+    struct Section {
+        std::string header;
+        std::string body;
+    };
+    std::vector<Section> sections;
+
+    size_t pos = 0;
+    while (pos < chain.size()) {
+        size_t marker = chain.find("[0.", pos);
+        if (marker == std::string::npos) break;
+
+        size_t bracket_end = chain.find(']', marker);
+        if (bracket_end == std::string::npos) break;
+
+        std::string header = chain.substr(marker, bracket_end - marker + 1);
+        size_t body_start = bracket_end + 1;
+        if (body_start < chain.size() && chain[body_start] == '\n')
+            body_start++;
+
+        size_t next_marker = chain.find("[0.", body_start);
+        std::string body;
+        if (next_marker == std::string::npos) {
+            body = chain.substr(body_start);
+        } else {
+            body = chain.substr(body_start, next_marker - body_start);
+        }
+
+        sections.push_back({header, body});
+        pos = (next_marker == std::string::npos) ? chain.size() : next_marker;
+    }
+
+    int inserted = 0;
+    for (const auto& inj : injections) {
+        std::string block = inj.block;
+        size_t placeholder = block.find("[0.N]");
+        if (placeholder != std::string::npos) {
+            std::string new_num = "[0." + std::to_string((int)sections.size() + inserted) + "]";
+            block.replace(placeholder, 5, new_num);
+        }
+
+        size_t hdr_end = block.find(']');
+        std::string body;
+        if (hdr_end != std::string::npos) {
+            body = block.substr(hdr_end + 1);
+            if (!body.empty() && body[0] == '\n')
+                body = body.substr(1);
+        }
+        std::string header = (hdr_end != std::string::npos) ? block.substr(0, hdr_end + 1) : "[0.N]";
+
+        Section sec{header, body};
+        if (inj.position == -1 || inj.position >= (int)sections.size()) {
+            sections.push_back(sec);
+        } else {
+            sections.insert(sections.begin() + inj.position, sec);
+        }
+        inserted++;
+    }
+
+    std::ostringstream out;
+    for (size_t i = 0; i < sections.size(); i++) {
+        out << "[0." << i << "]\n" << sections[i].body;
+    }
+    chain = out.str();
+}
+
+static std::string build_flip_block(int flip_type, int par, int altidx, int item_count) {
+    std::ostringstream fe;
+    fe << "[0.N]\neffect.name=反転\n";
+
+    if (flip_type == FLIP_HORIZONTAL) {
+        bool active = (par == 1 && altidx % 2 == 0) ||
+                      (par == 0 && altidx % 2 == 1);
+        fe << "左右反転=" << (active ? "1" : "0") << "\n";
+        fe << "上下反転=0\n";
+    } else if (flip_type == FLIP_VERTICAL) {
+        bool active = (par == 1 && altidx % 2 == 0) ||
+                      (par == 0 && altidx % 2 == 1);
+        fe << "左右反転=0\n";
+        fe << "上下反転=" << (active ? "1" : "0") << "\n";
+    } else if (flip_type == FLIP_CW) {
+        int r = item_count % 4;
+        fe << "左右反転=" << ((r == 1 || r == 2) ? "1" : "0") << "\n";
+        fe << "上下反転=" << ((r == 2 || r == 3) ? "1" : "0") << "\n";
+    } else if (flip_type == FLIP_CCW) {
+        int r = item_count % 4;
+        fe << "左右反転=" << ((r == 2 || r == 3) ? "1" : "0") << "\n";
+        fe << "上下反転=" << ((r == 1 || r == 2) ? "1" : "0") << "\n";
+    }
+
+    fe << "輝度反転=0\n色相反転=0\n透明度反転=0\n";
+    return fe.str();
+}
+
 static std::string apply_template_to_item(const std::string& template_chain,
                                             double soffs, double playrate,
-                                            int loop) {
+                                            int loop,
+                                            const std::vector<ParamBake>& param_bakes,
+                                            const std::vector<PresetEntry>& presets) {
     std::string result = template_chain;
     size_t pos;
 
@@ -158,6 +360,9 @@ static std::string apply_template_to_item(const std::string& template_chain,
         result.replace(pos, end - pos, u8"ループ再生=" + std::to_string(loop));
         pos++;
     }
+
+    inject_param_bakes(result, param_bakes);
+    inject_presets(result, presets);
 
     return result;
 }
@@ -424,36 +629,22 @@ static void on_generate_from_imgui() {
                                 }
                             }
 
-                            std::string chain = apply_template_to_item(gs->template_chain, iv.soffs, iv.playrate, iv.loop);
-
+                            std::vector<PresetEntry> item_presets;
                             if (config.alt_flip && config.flip_type != 0) {
-                                int sn = 0; for (char c : chain) if (c == '[') sn++;
-                                std::ostringstream fe;
-                                fe << "[0." << sn << "]\neffect.name=反転\n";
-
-                                if (config.flip_type == FLIP_HORIZONTAL) {
-                                    bool active = (par == 1 && altidx_global % 2 == 0) ||
-                                                  (par == 0 && altidx_global % 2 == 1);
-                                    fe << "左右反転=" << (active ? "1" : "0") << "\n";
-                                    fe << "上下反転=0\n";
-                                } else if (config.flip_type == FLIP_VERTICAL) {
-                                    bool active = (par == 1 && altidx_global % 2 == 0) ||
-                                                  (par == 0 && altidx_global % 2 == 1);
-                                    fe << "左右反転=0\n";
-                                    fe << "上下反転=" << (active ? "1" : "0") << "\n";
-                                } else if (config.flip_type == FLIP_CW) {
-                                    int r = item_count_global % 4;
-                                    fe << "左右反転=" << ((r == 1 || r == 2) ? "1" : "0") << "\n";
-                                    fe << "上下反転=" << ((r == 2 || r == 3) ? "1" : "0") << "\n";
-                                } else if (config.flip_type == FLIP_CCW) {
-                                    int r = item_count_global % 4;
-                                    fe << "左右反転=" << ((r == 2 || r == 3) ? "1" : "0") << "\n";
-                                    fe << "上下反転=" << ((r == 1 || r == 2) ? "1" : "0") << "\n";
+                                PresetEntry p;
+                                p.effect_block = build_flip_block(config.flip_type, par, altidx_global, item_count_global);
+                                if (!g_presets.empty()) {
+                                    p.position = g_presets[0].position;
+                                } else {
+                                    p.position = -1;
                                 }
-
-                                fe << "輝度反転=0\n色相反転=0\n透明度反転=0\n";
-                                chain += fe.str();
+                                p.active = true;
+                                item_presets.push_back(p);
                             }
+
+                            std::string chain = apply_template_to_item(
+                                gs->template_chain, iv.soffs, iv.playrate, iv.loop,
+                                g_param_bakes, item_presets);
 
                             int use_layer;
                             if (config.even_only)
@@ -524,20 +715,29 @@ static void on_open_config(EDIT_SECTION* edit) {
         return;
     }
 
-    auto obj = edit->get_selected_object(0);
-    if (!obj) {
-        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 无法获取选中物件");
+    g_template_aliases.clear();
+    int first_layer = 0;
+    for (int i = 0; i < sel_num; i++) {
+        auto obj = edit->get_selected_object(i);
+        if (!obj) continue;
+        LPCSTR alias_ptr = edit->get_object_alias(obj);
+        if (!alias_ptr) continue;
+        g_template_aliases.push_back(alias_ptr);
+        if (i == 0) {
+            g_project_state.template_alias = alias_ptr;
+            auto lf = edit->get_object_layer_frame(obj);
+            first_layer = lf.layer;
+        }
+    }
+
+    if (g_template_aliases.empty()) {
+        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 无法读取任何选中物件的数据");
         return;
     }
 
-    LPCSTR alias_ptr = edit->get_object_alias(obj);
-    if (!alias_ptr) {
-        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 无法读取模板物件数据");
-        return;
-    }
-    g_project_state.template_alias = alias_ptr;
-    auto lf = edit->get_object_layer_frame(obj);
-    g_project_state.template_layer = lf.layer;
+    g_project_state.template_layer = first_layer;
+    g_current_template_idx = 0;
+    g_template_effects_dirty = true;
 
     if (!g_project_state.has_data) {
         imgui_window_show_import_page();

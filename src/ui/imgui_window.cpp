@@ -293,8 +293,9 @@ void imgui_window_show() {
     g_show_effect_editor = false;
     g_param_bakes.clear();
     g_presets.clear();
-    init_mock_template_effects();
-    init_mock_presets();
+    g_current_template_idx = 0;
+    refresh_template_effects();
+    sync_presets_from_config();
     ShowWindow(g_imgui_hwnd, SW_SHOW);
     SetForegroundWindow(g_imgui_hwnd);
     g_visible = true;
