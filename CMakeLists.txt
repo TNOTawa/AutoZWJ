@@ -20,6 +20,7 @@ add_library(AutoZWJ SHARED
     src/ui/imgui_window.cpp
     src/ui/project_state.cpp
     src/ui/ui_components.cpp
+    src/ui/effect_chain_editor.cpp
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp

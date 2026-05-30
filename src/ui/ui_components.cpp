@@ -3,6 +3,7 @@
 #include "effect/effect_dict.h"
 #include "ui/file_picker.h"
 #include "ui/imgui_window.h"
+#include "ui/effect_chain_editor.h"
 #include "exo/object_generator.h"
 #include <algorithm>
 #include <sstream>
@@ -271,9 +272,15 @@ void render_nav_bar() {
         ImGui::SameLine(space);
     }
 
-    ImGui::PushStyleColor(ImGuiCol_Button, UI::COL_EFFECT_CHAIN_BG);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.35f, 0.50f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.22f, 0.35f, 1.0f));
+    if (g_show_effect_editor) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.35f, 0.50f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.40f, 0.40f, 0.55f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.28f, 0.28f, 0.42f, 1.0f));
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Button, UI::COL_EFFECT_CHAIN_BG);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.35f, 0.50f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.22f, 0.35f, 1.0f));
+    }
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 
     if (g_font_bold && g_font_bold != g_font_normal) {
@@ -281,7 +288,7 @@ void render_nav_bar() {
     }
 
     if (ImGui::Button(u8"效果链编辑", ImVec2(UI::EFFECT_CHAIN_BUTTON_WIDTH, 0))) {
-        // 后补
+        g_show_effect_editor = !g_show_effect_editor;
     }
 
     if (g_font_bold && g_font_bold != g_font_normal) {
@@ -406,23 +413,59 @@ void render_config_page() {
     ImGui::Separator();
 
     float avail_h = ImGui::GetContentRegionAvail().y - 50;
-    float left_w = ImGui::GetContentRegionAvail().x * 0.55f;
+    float avail_w = ImGui::GetContentRegionAvail().x;
 
-    ImGui::Columns(2, "main_columns", false);
-    ImGui::SetColumnWidth(0, left_w);
+    static float anim_width = 0.0f;
+    float target_w = g_show_effect_editor ? (avail_w * 0.34f) : 0.0f;
+    anim_width = anim_width + (target_w - anim_width) * 0.15f;
 
-    ImGui::BeginChild("ConfigLeft", ImVec2(0, avail_h), true);
-    render_track_tree(false);
-    ImGui::EndChild();
+    if (anim_width < 1.0f) {
+        // === 双列模式 ===
+        ImGui::Columns(2, "main_cols", false);
+        ImGui::SetColumnWidth(0, avail_w * 0.50f);
 
-    ImGui::NextColumn();
+        // 左列
+        ImGui::BeginChild("ConfigLeft", ImVec2(0, avail_h), false);
+        render_track_tree(false);
+        ImGui::EndChild();
 
-    ImGui::BeginChild("ConfigRight", ImVec2(0, avail_h), true);
-    render_config_panel();
-    ImGui::EndChild();
+        ImGui::NextColumn();
+
+        // 右列
+        ImGui::BeginChild("ConfigRight", ImVec2(0, avail_h), false);
+        render_config_panel();
+        ImGui::EndChild();
+    } else {
+        // === 三列模式 ===
+        float remaining = avail_w - anim_width;
+        float left_w = remaining * 0.50f;
+        float mid_w = remaining - left_w;
+
+        ImGui::Columns(3, "main_cols", false);
+        ImGui::SetColumnWidth(0, left_w);
+        ImGui::SetColumnWidth(1, mid_w);
+
+        // 左列：轨道树
+        ImGui::BeginChild("ConfigLeft", ImVec2(0, avail_h), false);
+        render_track_tree(false);
+        ImGui::EndChild();
+
+        ImGui::NextColumn();
+
+        // 中列：参数编辑
+        ImGui::BeginChild("ConfigMid", ImVec2(0, avail_h), false);
+        render_config_panel();
+        ImGui::EndChild();
+
+        ImGui::NextColumn();
+
+        // 右列：效果链编辑器
+        ImGui::BeginChild("ConfigRight", ImVec2(0, avail_h), false);
+        render_effect_chain_panel();
+        ImGui::EndChild();
+    }
 
     ImGui::Columns(1);
-
     render_action_bar();
 }
 
@@ -447,6 +490,15 @@ void render_config_panel() {
     ImGui::Text(u8"参数设置");
     ImGui::Separator();
 
+    bool flip_highlight = (g_highlight_param_id == "flip_config" && g_highlight_timer > 0);
+    if (flip_highlight) {
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.25f, 0.35f, 0.55f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.30f, 0.40f, 0.60f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.35f, 0.45f, 0.65f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.35f, 0.55f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.30f, 0.40f, 0.60f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.35f, 0.45f, 0.65f, 1.0f));
+    }
     ImGui::Checkbox(u8"交替翻转", &cfg.alt_flip);
     if (cfg.alt_flip) {
         ImGui::Indent(16);
@@ -468,6 +520,9 @@ void render_config_panel() {
         else if (flip_idx == 2) cfg.flip_type = FLIP_CW;
         else cfg.flip_type = FLIP_CCW;
         ImGui::Unindent(16);
+    }
+    if (flip_highlight) {
+        ImGui::PopStyleColor(6);
     }
 
     ImGui::Checkbox(u8"偶数项换行", &cfg.even_only);
@@ -508,37 +563,6 @@ void render_config_panel() {
 
     // 向后兼容：同步旧 no_gap 字段
     cfg.no_gap = (cfg.sync_mode == 1);
-}
-
-// ---------------------------------------------------------------------------
-// 效果选择
-// ---------------------------------------------------------------------------
-void render_effect_picker() {
-    ImGui::Text(u8"效果选择");
-
-    auto& reg = get_effect_registry();
-    float window_width = ImGui::GetContentRegionAvail().x;
-    int columns = std::max(2, (int)(window_width / 150.0f));
-
-    int count = 0;
-    for (auto& eff : reg) {
-        ImGui::PushID(eff.name_en.c_str());
-        bool sel = g_project_state.config.selected_effects.end() !=
-            std::find(g_project_state.config.selected_effects.begin(),
-                g_project_state.config.selected_effects.end(), eff.name_en);
-        if (ImGui::Checkbox(eff.name_ja.c_str(), &sel)) {
-            if (sel) g_project_state.config.selected_effects.push_back(eff.name_en);
-            else {
-                auto it = std::find(g_project_state.config.selected_effects.begin(),
-                    g_project_state.config.selected_effects.end(), eff.name_en);
-                if (it != g_project_state.config.selected_effects.end())
-                    g_project_state.config.selected_effects.erase(it);
-            }
-        }
-        ImGui::PopID();
-        count++;
-        if (count % columns != 0) ImGui::SameLine();
-    }
 }
 
 // ---------------------------------------------------------------------------

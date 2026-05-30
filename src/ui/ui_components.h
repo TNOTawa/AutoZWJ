@@ -18,7 +18,6 @@ void render_config_page();
 // 轨道树渲染，read_only=true 时不可交互（仅预览）
 void render_track_tree(bool read_only = false);
 void render_config_panel();
-void render_effect_picker();
 void render_action_bar();
 
 // 目录持久化

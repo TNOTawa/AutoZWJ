@@ -4,6 +4,7 @@
 #include "imgui_impl_dx11.h"
 #include "ui_components.h"
 #include "ui/ui_config.h"
+#include "ui/effect_chain_editor.h"
 #include "plugin.h"
 #include <d3d11.h>
 #include <cstdio>
@@ -201,7 +202,7 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
     g_imgui_hwnd = CreateWindowExW(
         0, L"AutoZWJ_Window", L"AutoZWJ - 配置导入参数",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 900, 650,
+        CW_USEDEFAULT, CW_USEDEFAULT, 1127, 650,
         host_window, nullptr, hinst, nullptr);
     if (!g_imgui_hwnd) return false;
 
@@ -289,6 +290,11 @@ void imgui_window_show() {
     if (!g_initialized) return;
     if (!g_scene_info.valid) sync_scene_info();
     g_current_page = AppPage::Config;
+    g_show_effect_editor = false;
+    g_param_bakes.clear();
+    g_presets.clear();
+    init_mock_template_effects();
+    init_mock_presets();
     ShowWindow(g_imgui_hwnd, SW_SHOW);
     SetForegroundWindow(g_imgui_hwnd);
     g_visible = true;

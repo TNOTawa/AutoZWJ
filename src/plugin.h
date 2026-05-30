@@ -59,8 +59,6 @@ struct OutputConfig {
     bool play_pos_by_frame = false;
     std::string src_path;
     std::string exedit_lang = "ja";
-    std::vector<std::string> selected_effects;
-    std::map<std::string, std::map<std::string, std::string>> effect_overrides;
 
     // Phase 5: 物件与音符同步
     int sync_mode = 1;          // 0=与音符对齐, 1=拉伸到下一音符, 2=拉伸到固定值, 3=仅在间隙生成, 4=仅在间隙并拉伸固定值
