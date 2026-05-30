@@ -97,10 +97,6 @@ static const std::vector<EffectDef> s_effect_registry = {
     {"アニメーション効果", "AnimationEffect", "动画效果", {{"track0", "0.0", 0}, {"track1", "0.0", 0}, {"track2", "0.0", 0}, {"track3", "0.0", 0}, {"チェック0", "0.0", 0}, {"チェック1", "0.0", 0}, {"チェック2", "0.0", 0}, {"チェック3", "0.0", 0}}},
 };
 
-const std::vector<EffectDef>& get_effect_registry() {
-    return s_effect_registry;
-}
-
 const EffectDef* find_effect(const std::string& name) {
     for (auto& e : s_effect_registry) {
         if (e.name_ja == name || e.name_en == name || e.name_zh == name)
@@ -109,29 +105,4 @@ const EffectDef* find_effect(const std::string& name) {
     return nullptr;
 }
 
-static const std::map<int, std::string> s_blend_modes_ja = {
-    {0, "通常"}, {1, "加算"}, {2, "減算"}, {3, "乗算"},
-    {4, "スクリーン"}, {5, "オーバーレイ"}, {6, "比較(明)"}, {7, "比較(暗)"},
-    {8, "輝度"}, {9, "色差"}, {10, "陰影"},
-};
 
-static const std::map<int, std::string> s_blend_modes_en = {
-    {0, "Normal"}, {1, "Add"}, {2, "Subtract"}, {3, "Multiply"},
-    {4, "Screen"}, {5, "Overlay"}, {6, "Lighter"}, {7, "Darker"},
-    {8, "Brightness"}, {9, "ColorDiff"}, {10, "Shade"},
-};
-
-const std::map<int, std::string>& get_blend_modes_ja() { return s_blend_modes_ja; }
-const std::map<int, std::string>& get_blend_modes_en() { return s_blend_modes_en; }
-
-static const std::vector<MediaInputEffect> s_media_inputs = {
-    {L"動画ファイル", "Video", "ファイル"},
-    {L"音声ファイル", "Audio", "ファイル"},
-    {L"画像ファイル", "Image", "ファイル"},
-    {L"図形", "Figure", ""},
-    {L"テキスト", "Text", ""},
-    {L"シーン", "Scene", ""},
-    {L"カメラ制御", "CameraControl", ""},
-};
-
-const std::vector<MediaInputEffect>& get_media_input_effects() { return s_media_inputs; }
