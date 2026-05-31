@@ -291,9 +291,14 @@ void imgui_window_show() {
     if (!g_scene_info.valid) sync_scene_info();
     g_current_page = AppPage::Config;
     g_show_effect_editor = false;
-    g_param_bakes.clear();
-    g_presets.clear();
     g_current_template_idx = 0;
+    if (!g_template_pool.empty()) {
+        load_template_data(0);
+    } else {
+        g_param_bakes.clear();
+        g_presets.clear();
+        g_template_effects.clear();
+    }
     refresh_template_effects();
     sync_presets_from_config();
     ShowWindow(g_imgui_hwnd, SW_SHOW);
@@ -315,6 +320,7 @@ void imgui_window_show_import_page() {
 }
 
 void imgui_window_hide() {
+    save_current_template_data();
     g_visible = false;
     if (g_imgui_hwnd) ShowWindow(g_imgui_hwnd, SW_HIDE);
 }

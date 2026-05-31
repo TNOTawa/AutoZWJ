@@ -20,13 +20,40 @@ int g_highlight_timer = 0;
 std::vector<std::string> g_template_aliases;
 bool g_template_effects_dirty = true;
 
+std::vector<std::vector<ParsedEffect>> g_template_effects_per_tpl;
+std::vector<std::vector<ParamBake>> g_param_bakes_per_tpl;
+std::vector<std::vector<PresetEntry>> g_template_presets_per_tpl;
+
 // ---- 静态状态（持久到会话结束） ----
 static std::vector<bool> s_header_states;
+
+void save_current_template_data() {
+    if (g_current_template_idx < 0 || g_current_template_idx >= (int)g_template_pool.size()) return;
+    if ((int)g_template_effects_per_tpl.size() < (int)g_template_pool.size()) {
+        g_template_effects_per_tpl.resize(g_template_pool.size());
+        g_param_bakes_per_tpl.resize(g_template_pool.size());
+        g_template_presets_per_tpl.resize(g_template_pool.size());
+    }
+    g_template_effects_per_tpl[g_current_template_idx] = g_template_effects;
+    g_param_bakes_per_tpl[g_current_template_idx] = g_param_bakes;
+    g_template_presets_per_tpl[g_current_template_idx] = g_presets;
+}
+
+void load_template_data(int idx) {
+    if (idx < 0 || idx >= (int)g_template_pool.size()) return;
+    if ((int)g_template_effects_per_tpl.size() < (int)g_template_pool.size()) {
+        g_template_effects_per_tpl.resize(g_template_pool.size());
+        g_param_bakes_per_tpl.resize(g_template_pool.size());
+        g_template_presets_per_tpl.resize(g_template_pool.size());
+    }
+    g_template_effects = g_template_effects_per_tpl[idx];
+    g_param_bakes = g_param_bakes_per_tpl[idx];
+    g_presets = g_template_presets_per_tpl[idx];
+}
 
 void refresh_template_effects() {
     g_template_effects_dirty = false;
     g_template_effects.clear();
-    g_param_bakes.clear();
     s_header_states.clear();
 
     if (g_current_template_idx < 0 || g_current_template_idx >= (int)g_template_aliases.size())
@@ -220,10 +247,15 @@ void render_effect_chain_panel() {
 
     // ---- TabBar（多模板时显示） ----
     bool template_changed = false;
+    int prev_template_idx = g_current_template_idx;
     if (g_template_aliases.size() > 1) {
         if (ImGui::BeginTabBar("Templates")) {
             for (int i = 0; i < (int)g_template_aliases.size(); i++) {
                 std::string label = u8"模板" + std::to_string(i + 1);
+                if (i < (int)g_template_pool.size() && !g_template_pool[i].display_name.empty()) {
+                    label = g_template_pool[i].display_name;
+                    if (label.size() > 16) label = label.substr(0, 13) + "...";
+                }
                 if (ImGui::BeginTabItem(label.c_str())) {
                     if (g_current_template_idx != i) {
                         g_current_template_idx = i;
@@ -236,11 +268,15 @@ void render_effect_chain_panel() {
         }
     }
     if (template_changed) {
-        g_param_bakes.clear();
+        int new_idx = g_current_template_idx;
+        g_current_template_idx = prev_template_idx;
+        save_current_template_data();
+        g_current_template_idx = new_idx;
         s_header_states.clear();
         if (g_current_template_idx >= 0 && g_current_template_idx < (int)g_template_aliases.size()) {
             g_project_state.template_alias = g_template_aliases[g_current_template_idx];
         }
+        load_template_data(g_current_template_idx);
         refresh_template_effects();
     }
 

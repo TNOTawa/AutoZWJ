@@ -41,6 +41,15 @@ struct TrackNode {
     std::vector<TrackNode> children;
 };
 
+struct TemplateEntry {
+    int object_id = 0;
+    std::string alias;
+    std::string display_name;
+    int layer = 0;
+    double sf = 0.0;
+    std::string chain;
+};
+
 struct OutputConfig {
     int fps_num = 60;
     int fps_den = 1;
@@ -67,6 +76,11 @@ struct OutputConfig {
     bool reverse_layer_order = false;
     int track_filter_mode = 0;  // 0=全部独立, 1=仅取第N轨, 2=仅取倒数第N轨
     int track_filter_n = 1;
+
+    // Phase 4: 多源映射
+    int mapping_strategy = 1;            // 1=顺序轮替, 2=随机抽选, 3=和弦映射
+    int mapping_sequential_order = 0;    // 0=顺序, 1=倒序, 2=洗牌
+    bool mapping_no_consecutive = false; // 随机抽选：禁止连续重复
 };
 
 struct EffectParam {
@@ -110,6 +124,7 @@ extern SceneInfo g_scene_info;
 extern EDIT_HANDLE* g_edit_handle;
 extern LOG_HANDLE* g_logger;
 extern HINSTANCE g_dll_hinst;
+extern std::vector<TemplateEntry> g_template_pool;
 
 std::wstring utf8_to_wide(const std::string& utf8);
 std::string wide_to_utf8(const std::wstring& wide);

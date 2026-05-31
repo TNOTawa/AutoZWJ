@@ -567,6 +567,51 @@ void render_config_panel() {
 
     // 向后兼容：同步旧 no_gap 字段
     cfg.no_gap = (cfg.sync_mode == 1);
+
+    // Phase 4: 多源映射（仅当模板池 >= 2 时显示）
+    if (g_template_pool.size() >= 2) {
+        ImGui::Spacing();
+        ImGui::Text(u8"多模板映射");
+        ImGui::Separator();
+
+        ImGui::TextDisabled(u8"当前模板池: %d 个物件（按时间轴顺序）", (int)g_template_pool.size());
+        for (size_t i = 0; i < g_template_pool.size(); i++) {
+            if (i > 0) ImGui::SameLine();
+            ImGui::Text("[%s]", g_template_pool[i].display_name.c_str());
+        }
+
+        int strategy_idx = cfg.mapping_strategy - 1;
+        if (strategy_idx < 0) strategy_idx = 0;
+        if (strategy_idx > 2) strategy_idx = 2;
+
+        ImGui::RadioButton(u8"顺序轮替", &strategy_idx, 0);
+        if (strategy_idx == 0) {
+            ImGui::Indent(24);
+            static const char* order_labels[] = { u8"顺序", u8"倒序", u8"洗牌" };
+            ImGui::Combo(u8"##seq_order", &cfg.mapping_sequential_order, order_labels, 3);
+            ImGui::Unindent(24);
+        }
+
+        ImGui::RadioButton(u8"随机抽选", &strategy_idx, 1);
+        if (strategy_idx == 1) {
+            ImGui::Indent(24);
+            ImGui::Checkbox(u8"禁止连续重复", &cfg.mapping_no_consecutive);
+            ImGui::Unindent(24);
+        }
+
+        ImGui::RadioButton(u8"和弦映射", &strategy_idx, 2);
+        if (strategy_idx == 2) {
+            ImGui::Indent(24);
+            if (cfg.track_filter_mode != 0) {
+                ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.3f, 1.0f), u8"⚠ 需要多音符策略设为“全部独立”");
+            } else {
+                ImGui::TextDisabled(u8"使用和弦位置分配模板");
+            }
+            ImGui::Unindent(24);
+        }
+
+        cfg.mapping_strategy = strategy_idx + 1;
+    }
 }
 
 // ---------------------------------------------------------------------------

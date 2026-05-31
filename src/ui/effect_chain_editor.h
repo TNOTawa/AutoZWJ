@@ -41,10 +41,17 @@ extern int g_highlight_timer;                // 高亮倒计时（帧数）
 extern std::vector<std::string> g_template_aliases;
 extern bool g_template_effects_dirty;
 
+// 每模板独立的数据（二维数组，索引与 g_template_pool / g_template_aliases 对齐）
+extern std::vector<std::vector<ParsedEffect>> g_template_effects_per_tpl;
+extern std::vector<std::vector<ParamBake>> g_param_bakes_per_tpl;
+extern std::vector<std::vector<PresetEntry>> g_template_presets_per_tpl;
+
 // ---- 函数声明 ----
 std::vector<ParsedEffect> parse_effect_chain(const std::string& alias_chain);
 void refresh_template_effects();
 void sync_presets_from_config();
+void save_current_template_data();
+void load_template_data(int idx);
 
 // ---- 渲染 ----
 void render_effect_chain_panel();

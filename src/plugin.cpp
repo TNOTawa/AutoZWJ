@@ -9,12 +9,73 @@
 #include <algorithm>
 #include <sstream>
 #include <cmath>
+#include <cstdint>
 
 ProjectState g_project_state;
 SceneInfo g_scene_info;
 EDIT_HANDLE* g_edit_handle = nullptr;
 LOG_HANDLE* g_logger = nullptr;
 HINSTANCE g_dll_hinst = nullptr;
+std::vector<TemplateEntry> g_template_pool;
+
+static uint32_t hash_string(const std::string& s) {
+    uint32_t h = 5381;
+    for (char c : s) {
+        h = ((h << 5) + h) + static_cast<unsigned char>(c);
+    }
+    return h;
+}
+
+static std::vector<int> generate_shuffled_order(int pool_size, uint32_t seed) {
+    std::vector<int> order(pool_size);
+    for (int i = 0; i < pool_size; i++) order[i] = i;
+    for (int i = pool_size - 1; i > 0; i--) {
+        seed = seed * 1103515245u + 12345u;
+        int j = static_cast<int>(seed % static_cast<uint32_t>(i + 1));
+        std::swap(order[i], order[j]);
+    }
+    return order;
+}
+
+static int pick_template_index(int item_count_global, int chord_index, int pool_size,
+                                int strategy, const OutputConfig& config, int prev_tpl_idx,
+                                const std::vector<int>& shuffled_order, uint32_t seed_base) {
+    if (pool_size <= 1) return 0;
+
+    switch (strategy) {
+    case 1: { // 顺序轮替
+        int idx;
+        switch (config.mapping_sequential_order) {
+        case 0: idx = item_count_global % pool_size; break;
+        case 1: idx = (pool_size - 1) - (item_count_global % pool_size); break;
+        case 2: {
+            if (!shuffled_order.empty())
+                idx = shuffled_order[item_count_global % pool_size];
+            else
+                idx = item_count_global % pool_size;
+            break;
+        }
+        default: idx = item_count_global % pool_size; break;
+        }
+        return idx;
+    }
+    case 2: { // 随机抽选
+        uint32_t seed = seed_base ^ static_cast<uint32_t>(item_count_global * 2654435761u);
+        seed = seed * 1103515245u + 12345u;
+        int idx = static_cast<int>(seed % static_cast<uint32_t>(pool_size));
+        if (config.mapping_no_consecutive && idx == prev_tpl_idx && pool_size > 1) {
+            idx = (idx + 1) % pool_size;
+        }
+        return idx;
+    }
+    case 3: { // 和弦映射
+        int idx = (chord_index - 1) % pool_size;
+        return idx;
+    }
+    default:
+        return 0;
+    }
+}
 
 std::wstring utf8_to_wide(const std::string& utf8) {
     if (utf8.empty()) return L"";
@@ -225,6 +286,7 @@ static void inject_presets(std::string& chain, const std::vector<PresetEntry>& p
     std::vector<Injection> injections;
     for (const auto& p : presets) {
         if (!p.active) continue;
+        if (p.effect_block.empty()) continue;
         injections.push_back({p.position, p.effect_block});
     }
     if (injections.empty()) return;
@@ -398,7 +460,7 @@ static void on_generate_from_imgui() {
         if (g_logger) g_logger->warn(g_logger, L"AutoZWJ: 未加载音频工程");
         return;
     }
-    if (g_project_state.template_alias.empty()) {
+    if (g_template_pool.empty()) {
         if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 未设置模板，请右键已选物件 → 配置导入... 重新打开");
         return;
     }
@@ -407,21 +469,39 @@ static void on_generate_from_imgui() {
         ObjDict* objdict;
         std::vector<TrackNode>* tracks;
         OutputConfig* config;
-        std::string template_chain;
+        std::vector<TemplateEntry> template_pool;
+        std::vector<std::vector<ParamBake>>* bakes_per_tpl;
+        std::vector<std::vector<PresetEntry>>* presets_per_tpl;
         LOG_HANDLE* logger;
         int created;
         int base_layer;
+        uint32_t seed_base;
+        std::vector<int> shuffled_order;
     };
 
-    std::string chain = extract_template_chain(g_project_state.template_alias);
-    if (chain.empty()) {
-        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 模板物件格式无效，请重新选择模板");
-        return;
+    // 保存当前效果链编辑器数据
+    save_current_template_data();
+
+    uint32_t seed_base = 0;
+    if (!g_project_state.file_path.empty()) {
+        seed_base = hash_string(wide_to_utf8(g_project_state.file_path));
     }
 
-    auto* state = new GenState{ &g_project_state.objdict, &g_project_state.tracks,
-                                 &g_project_state.config, chain, g_logger, 0,
-                                 g_project_state.template_layer + 1 };
+    // 生成洗牌顺序（仅当需要时）
+    std::vector<int> shuffled_order;
+    if (g_project_state.config.mapping_strategy == 1 &&
+        g_project_state.config.mapping_sequential_order == 2 &&
+        g_template_pool.size() > 1) {
+        shuffled_order = generate_shuffled_order(static_cast<int>(g_template_pool.size()), seed_base);
+    }
+
+    auto* state = new GenState{
+        &g_project_state.objdict, &g_project_state.tracks,
+        &g_project_state.config, g_template_pool,
+        &g_param_bakes_per_tpl, &g_template_presets_per_tpl,
+        g_logger, 0, g_project_state.template_layer + 1,
+        seed_base, shuffled_order
+    };
 
     g_edit_handle->call_edit_section_param(state, [](void* param, EDIT_SECTION* edit) {
         auto* gs = static_cast<GenState*>(param);
@@ -482,6 +562,7 @@ static void on_generate_from_imgui() {
                             double playrate, soffs;
                             int fileidx;
                             std::string file_path;
+                            int chord_index = 1;
                         };
                         std::vector<Interval> intervals;
 
@@ -530,6 +611,22 @@ static void on_generate_from_imgui() {
 
                             intervals.push_back({k, obj_fp, bf, pitch, sf, ef,
                                 objdict.loop[k], objdict.playrate[k], objdict.soffs[k], fileidx, file_path});
+                        }
+
+                        // 计算和弦索引（同一 sf 的连续 items 视为和弦）
+                        if (config.track_filter_mode == 0) {
+                            for (size_t k = 0; k < intervals.size(); ) {
+                                size_t j = k;
+                                while (j < intervals.size() && intervals[j].sf == intervals[k].sf) j++;
+                                int ci = 1;
+                                for (size_t m = k; m < j; m++) {
+                                    intervals[m].chord_index = ci++;
+                                }
+                                k = j;
+                            }
+                        } else {
+                            // 非“全部独立”时 chord_index 恒为 1，和弦映射退化为使用第一个模板
+                            for (auto& iv : intervals) iv.chord_index = 1;
                         }
 
                         bool is_gap_only = (config.sync_mode == 3 || config.sync_mode == 4);
@@ -586,6 +683,9 @@ static void on_generate_from_imgui() {
                         }
 
                         // --- 4. 实际生成 ---
+                        int prev_tpl_idx = -1;
+                        int pool_size = (int)gs->template_pool.size();
+
                         for (size_t iv_idx = 0; iv_idx < intervals.size(); iv_idx++) {
                             auto& iv = intervals[iv_idx];
 
@@ -629,12 +729,28 @@ static void on_generate_from_imgui() {
                                 }
                             }
 
+                            // 选择模板
+                            int tpl_idx = 0;
+                            if (pool_size > 1) {
+                                tpl_idx = pick_template_index(
+                                    item_count_global, iv.chord_index, pool_size,
+                                    config.mapping_strategy, config, prev_tpl_idx,
+                                    gs->shuffled_order, gs->seed_base);
+                            }
+
+                            // 获取模板链与每模板数据
+                            std::string tpl_chain = gs->template_pool[tpl_idx].chain;
+                            const auto& tpl_bakes = (*gs->bakes_per_tpl)[tpl_idx];
+
+                            // 翻转预设（全局配置，每 item 动态生成）
+                            // 注意：只将非空的翻转 block 注入 alias，不从 UI 传入 effect_block 为空的占位条目
                             std::vector<PresetEntry> item_presets;
                             if (config.alt_flip && config.flip_type != 0) {
                                 PresetEntry p;
                                 p.effect_block = build_flip_block(config.flip_type, par, altidx_global, item_count_global);
-                                if (!g_presets.empty()) {
-                                    p.position = g_presets[0].position;
+                                const auto& tpl_presets_ref = (*gs->presets_per_tpl)[tpl_idx];
+                                if (!tpl_presets_ref.empty()) {
+                                    p.position = tpl_presets_ref[0].position;
                                 } else {
                                     p.position = -1;
                                 }
@@ -643,8 +759,10 @@ static void on_generate_from_imgui() {
                             }
 
                             std::string chain = apply_template_to_item(
-                                gs->template_chain, iv.soffs, iv.playrate, iv.loop,
-                                g_param_bakes, item_presets);
+                                tpl_chain, iv.soffs, iv.playrate, iv.loop,
+                                tpl_bakes, item_presets);
+
+                            prev_tpl_idx = tpl_idx;
 
                             int use_layer;
                             if (config.even_only)
@@ -715,29 +833,71 @@ static void on_open_config(EDIT_SECTION* edit) {
         return;
     }
 
+    // 构建模板池
+    g_template_pool.clear();
     g_template_aliases.clear();
-    int first_layer = 0;
+
     for (int i = 0; i < sel_num; i++) {
         auto obj = edit->get_selected_object(i);
         if (!obj) continue;
         LPCSTR alias_ptr = edit->get_object_alias(obj);
         if (!alias_ptr) continue;
-        g_template_aliases.push_back(alias_ptr);
-        if (i == 0) {
-            g_project_state.template_alias = alias_ptr;
-            auto lf = edit->get_object_layer_frame(obj);
-            first_layer = lf.layer;
+
+        TemplateEntry entry;
+        entry.object_id = i;
+        entry.alias = alias_ptr;
+        entry.chain = extract_template_chain(entry.alias);
+        if (entry.chain.empty()) continue;
+
+        auto lf = edit->get_object_layer_frame(obj);
+        entry.layer = lf.layer;
+        entry.sf = static_cast<double>(lf.start);
+
+        LPCWSTR name_ptr = edit->get_object_name(obj);
+        if (name_ptr && name_ptr[0]) {
+            entry.display_name = wide_to_utf8(name_ptr);
+        } else {
+            entry.display_name = u8"模板" + std::to_string(i + 1);
         }
+
+        g_template_pool.push_back(entry);
+        g_template_aliases.push_back(entry.alias);
     }
 
-    if (g_template_aliases.empty()) {
+    if (g_template_pool.empty()) {
         if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 无法读取任何选中物件的数据");
         return;
     }
 
-    g_project_state.template_layer = first_layer;
+    // 按 (layer, frame) 排序
+    std::sort(g_template_pool.begin(), g_template_pool.end(), [](const TemplateEntry& a, const TemplateEntry& b) {
+        if (a.layer != b.layer) return a.layer < b.layer;
+        return a.sf < b.sf;
+    });
+
+    // 排序后重新同步 g_template_aliases
+    g_template_aliases.clear();
+    for (auto& tpl : g_template_pool) {
+        g_template_aliases.push_back(tpl.alias);
+    }
+
+    g_project_state.template_alias = g_template_pool[0].alias;
+    g_project_state.template_layer = g_template_pool[0].layer;
     g_current_template_idx = 0;
+
+    // 重置每模板数据
+    int pool_size = static_cast<int>(g_template_pool.size());
+    g_template_effects_per_tpl.assign(pool_size, {});
+    g_param_bakes_per_tpl.assign(pool_size, {});
+    g_template_presets_per_tpl.assign(pool_size, {});
+
+    // 重置当前活跃数据
+    g_param_bakes.clear();
+    g_presets.clear();
+    g_template_effects.clear();
     g_template_effects_dirty = true;
+    refresh_template_effects();
+    sync_presets_from_config();
 
     if (!g_project_state.has_data) {
         imgui_window_show_import_page();
