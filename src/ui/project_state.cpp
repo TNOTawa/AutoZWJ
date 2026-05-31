@@ -3,49 +3,110 @@
 #include "midi/midi_parser.h"
 #include <algorithm>
 
-static void load_config_from_project_file(EDIT_HANDLE* edit) {
+static bool g_project_state_dirty = false;
+
+void load_project_state_from_project_file(EDIT_SECTION* edit) {
+    if (!edit) return;
+    auto* pf = edit->get_project_file(g_edit_handle);
+    if (!pf) return;
+
+    g_project_state = ProjectState{};
+
     OutputConfig& cfg = g_project_state.config;
-    edit->call_read_section_param(&cfg, [](void* param, EDIT_SECTION* edit) {
-        auto* cfg = static_cast<OutputConfig*>(param);
-        auto* pf = edit->get_project_file(nullptr);
-        if (!pf) return;
-        auto val = pf->get_param_string("rppinexo.fps_num");
-        if (val) cfg->fps_num = std::atoi(val);
-        val = pf->get_param_string("rppinexo.fps_den");
-        if (val) cfg->fps_den = std::atoi(val);
-        val = pf->get_param_string("rppinexo.output_type");
-        if (val) cfg->output_type = std::atoi(val);
-        val = pf->get_param_string("rppinexo.alt_flip");
-        if (val) cfg->alt_flip = (std::atoi(val) != 0);
-        val = pf->get_param_string("rppinexo.flip_type");
-        if (val) cfg->flip_type = std::atoi(val);
-        val = pf->get_param_string("rppinexo.even_only");
-        if (val) cfg->even_only = (std::atoi(val) != 0);
-        val = pf->get_param_string("rppinexo.adjustment");
-        if (val) cfg->adjustment = (std::atoi(val) != 0);
-        val = pf->get_param_string("rppinexo.beatless_sync");
-        if (val) cfg->beatless_sync = (std::atoi(val) != 0);
-        val = pf->get_param_string("rppinexo.clipping");
-        if (val) cfg->clipping = std::atoi(val);
-        val = pf->get_param_string("rppinexo.is_ex_set");
-        if (val) cfg->is_ex_set = std::atoi(val);
-        val = pf->get_param_string("rppinexo.exedit_lang");
-        if (val) cfg->exedit_lang = val;
-        val = pf->get_param_string("rppinexo.mapping_strategy");
-        if (val) cfg->mapping_strategy = std::atoi(val);
-        val = pf->get_param_string("rppinexo.mapping_sequential_order");
-        if (val) cfg->mapping_sequential_order = std::atoi(val);
-        val = pf->get_param_string("rppinexo.mapping_no_consecutive");
-        if (val) cfg->mapping_no_consecutive = (std::atoi(val) != 0);
-        val = pf->get_param_string("rppinexo.last_directory");
-        if (val) g_project_state.last_directory = utf8_to_wide(val);
-    });
+    auto val = pf->get_param_string("rppinexo.fps_num");
+    if (val) cfg.fps_num = std::atoi(val);
+    val = pf->get_param_string("rppinexo.fps_den");
+    if (val) cfg.fps_den = std::atoi(val);
+    val = pf->get_param_string("rppinexo.output_type");
+    if (val) cfg.output_type = std::atoi(val);
+    val = pf->get_param_string("rppinexo.alt_flip");
+    if (val) cfg.alt_flip = (std::atoi(val) != 0);
+    val = pf->get_param_string("rppinexo.flip_type");
+    if (val) cfg.flip_type = std::atoi(val);
+    val = pf->get_param_string("rppinexo.even_only");
+    if (val) cfg.even_only = (std::atoi(val) != 0);
+    val = pf->get_param_string("rppinexo.adjustment");
+    if (val) cfg.adjustment = (std::atoi(val) != 0);
+    val = pf->get_param_string("rppinexo.beatless_sync");
+    if (val) cfg.beatless_sync = (std::atoi(val) != 0);
+    val = pf->get_param_string("rppinexo.clipping");
+    if (val) cfg.clipping = std::atoi(val);
+    val = pf->get_param_string("rppinexo.is_ex_set");
+    if (val) cfg.is_ex_set = std::atoi(val);
+    val = pf->get_param_string("rppinexo.exedit_lang");
+    if (val) cfg.exedit_lang = val;
+    val = pf->get_param_string("rppinexo.mapping_strategy");
+    if (val) cfg.mapping_strategy = std::atoi(val);
+    val = pf->get_param_string("rppinexo.mapping_sequential_order");
+    if (val) cfg.mapping_sequential_order = std::atoi(val);
+    val = pf->get_param_string("rppinexo.mapping_no_consecutive");
+    if (val) cfg.mapping_no_consecutive = (std::atoi(val) != 0);
+    val = pf->get_param_string("rppinexo.last_directory");
+    if (val) g_project_state.last_directory = utf8_to_wide(val);
+
+    val = pf->get_param_string("rppinexo.file_path");
+    if (val) g_project_state.file_path = utf8_to_wide(val);
+
+    val = pf->get_param_string("rppinexo.history_count");
+    int count = val ? std::atoi(val) : 0;
+    if (count < 0) count = 0;
+    if (count > 10) count = 10;
+    g_project_state.file_history.clear();
+    for (int i = 0; i < count; i++) {
+        std::string key = "rppinexo.history_" + std::to_string(i);
+        val = pf->get_param_string(key.c_str());
+        if (val && val[0]) {
+            g_project_state.file_history.push_back(utf8_to_wide(val));
+        }
+    }
+
+}
+
+void save_project_file_path_and_history(EDIT_SECTION* edit) {
+    if (!edit) return;
+    auto* pf = edit->get_project_file(g_edit_handle);
+    if (!pf) return;
+    pf->set_param_string("rppinexo.file_path", wide_to_utf8(g_project_state.file_path).c_str());
+    int count = (int)std::min(g_project_state.file_history.size(), size_t(10));
+    pf->set_param_string("rppinexo.history_count", std::to_string(count).c_str());
+    for (int i = 0; i < 10; i++) {
+        std::string key = "rppinexo.history_" + std::to_string(i);
+        if (i < count) {
+            pf->set_param_string(key.c_str(), wide_to_utf8(g_project_state.file_history[i]).c_str());
+        } else {
+            pf->set_param_string(key.c_str(), "");
+        }
+    }
+}
+
+void flush_project_file_state(EDIT_SECTION* edit) {
+    if (!g_project_state_dirty || !edit) return;
+    save_project_file_path_and_history(edit);
+    g_project_state_dirty = false;
+}
+
+void add_file_to_history(const std::wstring& path) {
+    auto it = std::find(g_project_state.file_history.begin(), g_project_state.file_history.end(), path);
+    if (it != g_project_state.file_history.end()) {
+        g_project_state.file_history.erase(it);
+    }
+    g_project_state.file_history.insert(g_project_state.file_history.begin(), path);
+    if (g_project_state.file_history.size() > 10) {
+        g_project_state.file_history.resize(10);
+    }
+    g_project_state_dirty = true;
+}
+
+void remove_file_from_history(int index) {
+    if (index < 0 || index >= (int)g_project_state.file_history.size()) return;
+    g_project_state.file_history.erase(g_project_state.file_history.begin() + index);
+    g_project_state_dirty = true;
 }
 
 void save_config_to_project_file(EDIT_HANDLE* edit, const OutputConfig& cfg) {
     edit->call_edit_section_param((void*)&cfg, [](void* param, EDIT_SECTION* edit) {
         auto* cfg = static_cast<const OutputConfig*>(param);
-        auto* pf = edit->get_project_file(nullptr);
+        auto* pf = edit->get_project_file(g_edit_handle);
         if (!pf) return;
         pf->set_param_string("rppinexo.fps_num", std::to_string(cfg->fps_num).c_str());
         pf->set_param_string("rppinexo.fps_den", std::to_string(cfg->fps_den).c_str());
@@ -89,6 +150,8 @@ bool parse_project_file(const std::wstring& file_path) {
     if (ok) {
         g_project_state.objdict.filelist = file_paths;
         g_project_state.has_data = true;
+        deselect_all_tracks();
+        add_file_to_history(file_path);
     }
     return ok;
 }

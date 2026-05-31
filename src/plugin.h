@@ -106,6 +106,7 @@ struct ProjectState {
     OutputConfig config;
     std::string template_alias;
     int template_layer = 0;
+    std::vector<std::wstring> file_history;
 };
 
 struct SceneInfo {
@@ -134,6 +135,11 @@ std::string maybe_cp932_to_utf8(const std::string& s);
 bool parse_project_file(const std::wstring& file_path);
 std::wstring get_project_summary();
 void save_config_to_project_file(EDIT_HANDLE* edit, const OutputConfig& cfg);
+void load_project_state_from_project_file(EDIT_SECTION* edit);
+void save_project_file_path_and_history(EDIT_SECTION* edit);
+void flush_project_file_state(EDIT_SECTION* edit);
+void add_file_to_history(const std::wstring& path);
+void remove_file_from_history(int index);
 void sync_scene_info();
 
 std::string extract_template_chain(const std::string& alias);

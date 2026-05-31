@@ -1050,11 +1050,28 @@ static void on_generate_from_imgui() {
 
 static void on_select_project(EDIT_SECTION* edit) {
     update_scene_from_edit(edit);
+    load_project_state_from_project_file(edit);
+    flush_project_file_state(edit);
     imgui_window_show_import_page();
 }
 
 static void on_open_config(EDIT_SECTION* edit) {
     update_scene_from_edit(edit);
+    load_project_state_from_project_file(edit);
+
+    if (!g_project_state.has_data) {
+        std::wstring path_to_load;
+        if (!g_project_state.file_path.empty()) {
+            path_to_load = g_project_state.file_path;
+        } else if (!g_project_state.file_history.empty()) {
+            path_to_load = g_project_state.file_history[0];
+        }
+        if (!path_to_load.empty()) {
+            parse_project_file(path_to_load);
+        }
+    }
+
+    flush_project_file_state(edit);
 
     int sel_num = edit->get_selected_object_num();
     if (sel_num <= 0) {
@@ -1137,7 +1154,9 @@ static void on_open_config(EDIT_SECTION* edit) {
 
 static void on_file_drop(EDIT_SECTION* edit, LPCWSTR file) {
     update_scene_from_edit(edit);
+    load_project_state_from_project_file(edit);
     if (parse_project_file(file)) {
+        flush_project_file_state(edit);
         if (g_logger)
             g_logger->log(g_logger, (L"AutoZWJ: " + get_project_summary()).c_str());
     }

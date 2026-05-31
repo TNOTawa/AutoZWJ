@@ -309,6 +309,15 @@ void render_import_page() {
     // --- REAPER 最近文件下拉框 ---
     static std::vector<std::wstring> recent_files;
     static int selected_recent_idx = -1;
+    static AppPage last_page = AppPage::Config;
+
+    if (last_page != g_current_page) {
+        last_page = g_current_page;
+        if (g_current_page == AppPage::Import) {
+            recent_files = get_reaper_recent_files_internal();
+            selected_recent_idx = -1;
+        }
+    }
 
     if (ImGui::Button(u8"刷新")) {
         recent_files = get_reaper_recent_files_internal();
@@ -402,14 +411,65 @@ void render_import_page() {
 // 配置导入页面（原主页面）
 // ---------------------------------------------------------------------------
 static void render_header_panel() {
-    if (!g_project_state.has_data) {
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f),
-            u8"未加载音频工程，请先导入工程（文件 \u2192 工程导入页面）");
-        return;
+    std::string preview;
+    std::string stats;
+    if (g_project_state.has_data) {
+        preview = wide_to_utf8(g_project_state.file_name);
+        std::wstring summary = get_project_summary();
+        std::string summary_utf8 = wide_to_utf8(summary);
+        size_t sep = summary_utf8.find(" | ");
+        if (sep != std::string::npos) {
+            stats = summary_utf8.substr(sep + 3);
+        }
+    } else {
+        preview = u8"未加载音频工程";
     }
-    std::wstring summary = get_project_summary();
-    std::string summary_utf8 = wide_to_utf8(summary);
-    ImGui::Text("%s", summary_utf8.c_str());
+
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.45f);
+    if (ImGui::BeginCombo("##ProjectCombo", preview.c_str())) {
+        if (ImGui::Selectable(u8"导入新工程...")) {
+            g_current_page = AppPage::Import;
+        }
+        if (!g_project_state.file_history.empty()) {
+            ImGui::Separator();
+            ImGui::TextDisabled(u8"历史记录");
+        }
+        for (int i = 0; i < (int)g_project_state.file_history.size(); i++) {
+            const std::wstring& path = g_project_state.file_history[i];
+            std::string name = wide_to_utf8(path);
+            size_t sep = name.find_last_of("\\/");
+            std::string display = (sep != std::string::npos) ? name.substr(sep + 1) : name;
+            bool is_selected = (g_project_state.has_data && g_project_state.file_path == path);
+
+            ImGui::PushID(i);
+            if (ImGui::Selectable(display.c_str(), is_selected)) {
+                parse_project_file(path);
+            }
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem(u8"删除记录")) {
+                    remove_file_from_history(i);
+                }
+                ImGui::EndPopup();
+            }
+            if (is_selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+
+    if (!stats.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("| %s", stats.c_str());
+    } else if (!g_project_state.has_data && !g_project_state.file_history.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled(u8"(从下拉框选择历史工程，或导入新工程)");
+    } else if (!g_project_state.has_data) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f),
+            u8"（文件 \u2192 工程导入页面）");
+    }
 }
 
 void render_config_page() {
@@ -627,9 +687,19 @@ void render_action_bar() {
             }
         });
     }
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 120);
-    if (ImGui::Button(u8"执行导入生成", ImVec2(110, 30))) {
+
+    float right_x = ImGui::GetContentRegionAvail().x - 110 - 110 - ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SameLine(right_x);
+
+    if (ImGui::Button(u8"应用", ImVec2(110, 30))) {
         if (g_project_state.has_data)
             imgui_window_trigger_generate();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"确定", ImVec2(110, 30))) {
+        if (g_project_state.has_data) {
+            imgui_window_trigger_generate();
+            imgui_window_hide();
+        }
     }
 }

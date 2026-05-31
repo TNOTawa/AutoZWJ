@@ -111,6 +111,8 @@ src/
 4. **`call_edit_section_param` 不可嵌套**：在已有的 EDIT_SECTION 回调内再次调用会崩溃。
 5. **lambda with capture 不能传 C 函数指针**：需用 `call_edit_section_param(state, ...)` 传参数，lambda 必须是无捕获的 `[](void* param, EDIT_SECTION* edit)`。
 6. **`get_selected_object()` 在回调外失效**：物件选中仅在菜单回调时有效，应在 `on_open_config` 时立即读取模板 alias 并缓存。
+7. **`get_project_file()` 参数不可传 `nullptr`**：SDK 签名要求传 `EDIT_HANDLE*`，实际传 `g_edit_handle`。传 `nullptr` 会导致宿主内部解引用崩溃。
+8. **跨工程数据隔离（关键）**：AviUtl2 切换工程时插件 DLL 通常不被卸载，所有全局变量（`g_project_state`、`g_template_pool` 等）会残留上一个工程的数据。任何 EDIT_SECTION 回调入口都必须先调用 `load_project_state_from_project_file(edit)`，且该函数开头必须执行 `g_project_state = ProjectState{}` 将工程相关字段全部重置，再从当前工程的 `PROJECT_FILE` 重新加载。禁止任何懒加载/缓存机制绕过此重置。
 
 ### UI 规则
 - 标签统一为中文，不加英文括号注释
