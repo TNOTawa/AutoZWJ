@@ -6,6 +6,8 @@
 #include "ui/file_picker.h"
 #include "ui/imgui_window.h"
 #include "ui/effect_chain_editor.h"
+#include "script/expr_evaluator.h"
+#include "script/variable_subst.h"
 #include <algorithm>
 #include <sstream>
 #include <cmath>
@@ -250,6 +252,72 @@ std::vector<ParsedEffect> parse_effect_chain(const std::string& chain) {
     return result;
 }
 
+static void inject_single_param(std::string& chain, const ParamBake& pb, size_t sec_pos, size_t sec_end) {
+    std::string search = "\n" + pb.param_name + "=";
+    size_t param_pos = chain.find(search, sec_pos);
+    if (param_pos == std::string::npos || param_pos >= sec_end) {
+        std::string new_line = "\n" + pb.param_name + "=" + pb.param_value;
+        if (sec_end == chain.size()) {
+            chain += new_line;
+        } else {
+            chain.insert(sec_end, new_line);
+        }
+    } else {
+        size_t line_start = param_pos + 1;
+        size_t line_end = chain.find('\n', line_start);
+        if (line_end == std::string::npos || line_end > sec_end)
+            line_end = sec_end;
+        chain.replace(line_start, line_end - line_start,
+                      pb.param_name + "=" + pb.param_value);
+    }
+}
+
+static void inject_motion_param(std::string& chain, const ParamBake& pb, size_t sec_pos, size_t sec_end) {
+    std::string search = "\n" + pb.param_name + "=";
+    size_t param_pos = chain.find(search, sec_pos);
+    if (param_pos == std::string::npos || param_pos >= sec_end) {
+        // 参数不存在：追加简化版（无运动格式）
+        std::string new_line = "\n" + pb.param_name + "=" + pb.param_value;
+        if (sec_end == chain.size()) {
+            chain += new_line;
+        } else {
+            chain.insert(sec_end, new_line);
+        }
+        return;
+    }
+
+    size_t line_start = param_pos + 1;
+    size_t line_end = chain.find('\n', line_start);
+    if (line_end == std::string::npos || line_end > sec_end)
+        line_end = sec_end;
+
+    std::string old_line = chain.substr(line_start, line_end - line_start);
+    size_t eq = old_line.find('=');
+    if (eq == std::string::npos) {
+        chain.replace(line_start, line_end - line_start,
+                      pb.param_name + "=" + pb.param_value);
+        return;
+    }
+
+    std::string old_val = old_line.substr(eq + 1);
+    size_t c1 = old_val.find(',');
+    if (c1 == std::string::npos) {
+        chain.replace(line_start, line_end - line_start,
+                      pb.param_name + "=" + pb.param_value);
+        return;
+    }
+    size_t c2 = old_val.find(',', c1 + 1);
+    if (c2 == std::string::npos) {
+        chain.replace(line_start, line_end - line_start,
+                      pb.param_name + "=" + pb.param_value);
+        return;
+    }
+
+    std::string new_val = pb.param_value + "," + pb.motion_end_value + old_val.substr(c2);
+    chain.replace(line_start, line_end - line_start,
+                  pb.param_name + "=" + new_val);
+}
+
 static void inject_param_bakes(std::string& chain, const std::vector<ParamBake>& bakes) {
     for (const auto& pb : bakes) {
         if (!pb.active) continue;
@@ -261,22 +329,10 @@ static void inject_param_bakes(std::string& chain, const std::vector<ParamBake>&
         size_t sec_end = chain.find("\n[0.", sec_pos + 1);
         if (sec_end == std::string::npos) sec_end = chain.size();
 
-        std::string search = "\n" + pb.param_name + "=";
-        size_t param_pos = chain.find(search, sec_pos);
-        if (param_pos == std::string::npos || param_pos >= sec_end) {
-            std::string new_line = "\n" + pb.param_name + "=" + pb.param_value;
-            if (sec_end == chain.size()) {
-                chain += new_line;
-            } else {
-                chain.insert(sec_end, new_line);
-            }
+        if (pb.is_motion) {
+            inject_motion_param(chain, pb, sec_pos, sec_end);
         } else {
-            size_t line_start = param_pos + 1;
-            size_t line_end = chain.find('\n', line_start);
-            if (line_end == std::string::npos || line_end > sec_end)
-                line_end = sec_end;
-            chain.replace(line_start, line_end - line_start,
-                          pb.param_name + "=" + pb.param_value);
+            inject_single_param(chain, pb, sec_pos, sec_end);
         }
     }
 }
@@ -429,6 +485,150 @@ static std::string apply_template_to_item(const std::string& template_chain,
     return result;
 }
 
+// 生成循环中使用的 interval 结构（定义在 lambda 外以便 build_item_vars 可见）
+struct ItemInterval {
+    size_t idx;
+    double obj_fp, bf;
+    double pitch;
+    int sf, ef;
+    int loop;
+    double playrate, soffs;
+    int fileidx;
+    std::string file_path;
+    int chord_index = 1;
+    int chord_count = 1;
+};
+
+static std::unordered_map<std::string, double> build_item_vars(
+    size_t item_idx,
+    const ItemInterval& interval,
+    const ObjDict& objdict,
+    const OutputConfig& config,
+    const TrackNode& track,
+    const SceneInfo& scene,
+    int item_count_global,
+    int total_items,
+    double track_pitch_min,
+    double track_pitch_max)
+{
+    std::unordered_map<std::string, double> vars;
+    double fps = (double)config.fps_num / (double)config.fps_den;
+
+    vars["note.pitch"]        = objdict.pitch[item_idx] + 69.0;
+    vars["note.velocity"]     = (item_idx < objdict.midi_volume.size() && objdict.midi_volume[item_idx] >= 0)
+                                  ? objdict.midi_volume[item_idx] : 100.0;
+    vars["note.index"]        = static_cast<double>(item_count_global + 1);
+    vars["note.index0"]       = static_cast<double>(item_count_global);
+    vars["note.duration"]     = std::round(objdict.length[item_idx] * fps);
+    vars["note.duration_sec"] = objdict.length[item_idx];
+    vars["note.start_frame"]  = std::round(objdict.pos[item_idx] * fps) + 1.0;
+    vars["note.end_frame"]    = std::round((objdict.pos[item_idx] + objdict.length[item_idx]) * fps);
+    vars["note.bpm"]          = objdict.bpm;
+
+    double pitch_val = objdict.pitch[item_idx] + 69.0;
+    vars["note.pitch_min"] = track_pitch_min;
+    vars["note.pitch_max"] = track_pitch_max;
+    if (track_pitch_max > track_pitch_min)
+        vars["note.pitch_ratio"] = (pitch_val - track_pitch_min) / (track_pitch_max - track_pitch_min);
+    else
+        vars["note.pitch_ratio"] = 0.5;
+
+    vars["item.position"]  = objdict.pos[item_idx];
+    vars["item.length"]    = objdict.length[item_idx];
+    vars["item.playrate"]  = objdict.playrate[item_idx];
+    vars["item.loop"]      = static_cast<double>(objdict.loop[item_idx]);
+    vars["item.soffs"]     = objdict.soffs[item_idx];
+
+    vars["midi.volume"]     = (item_idx < objdict.midi_volume.size())
+                                ? objdict.midi_volume[item_idx] : -1.0;
+    vars["midi.pan"]        = (item_idx < objdict.midi_pan.size())
+                                ? objdict.midi_pan[item_idx] : -1.0;
+    vars["midi.pitch_bend"] = (item_idx < objdict.midi_pitch_bend.size())
+                                ? objdict.midi_pitch_bend[item_idx] : 0.0;
+
+    vars["track.number"] = static_cast<double>(track.number);
+
+    vars["global.fps"]        = static_cast<double>(config.fps_num) / config.fps_den;
+    vars["global.width"]      = static_cast<double>(scene.width);
+    vars["global.height"]     = static_cast<double>(scene.height);
+    vars["global.item_count"] = static_cast<double>(total_items);
+
+    vars["chord.index"] = static_cast<double>(interval.chord_index);
+    vars["chord.count"] = static_cast<double>(interval.chord_count);
+
+    return vars;
+}
+
+static std::unordered_map<std::string, std::string> build_item_text_vars(
+    size_t item_idx,
+    const ObjDict& objdict)
+{
+    std::unordered_map<std::string, std::string> vars;
+    if (item_idx < objdict.midi_lyric.size())
+        vars["note.lyric"] = objdict.midi_lyric[item_idx];
+    else
+        vars["note.lyric"] = "";
+    return vars;
+}
+
+static std::vector<ParamBake> evaluate_bakes_for_item(
+    const std::vector<ParamBake>& source_bakes,
+    const std::unordered_map<std::string, double>& num_vars,
+    const std::unordered_map<std::string, std::string>& text_vars,
+    uint32_t rand_seed,
+    LOG_HANDLE* logger)
+{
+    ExprEvaluator evaluator;
+    evaluator.set_vars(num_vars);
+    evaluator.set_seed(rand_seed);
+
+    std::vector<ParamBake> result;
+    result.reserve(source_bakes.size());
+
+    for (const auto& pb : source_bakes) {
+        if (!pb.active) {
+            result.push_back(pb);
+            continue;
+        }
+
+        ParamBake eval_pb = pb;
+
+        if (pb.value_mode == 0) {
+            result.push_back(eval_pb);
+            continue;
+        }
+
+        std::string substituted = substitute_variables(pb.param_value, num_vars, text_vars);
+
+        if (pb.value_mode == 1) {
+            eval_pb.param_value = substituted;
+        } else if (pb.value_mode == 2) {
+            double val = 0.0;
+            std::string err;
+            if (!evaluator.evaluate(substituted, val, err)) {
+                if (logger) {
+                    std::string msg = "AutoZWJ: 表达式求值失败 [" + pb.param_name + "=\""
+                                      + pb.param_value + "\"]: " + err;
+                    logger->warn(logger, utf8_to_wide(msg).c_str());
+                }
+                eval_pb.active = false;
+            } else {
+                eval_pb.param_value = std::to_string(val);
+                std::string& s = eval_pb.param_value;
+                if (s.find('.') != std::string::npos) {
+                    while (!s.empty() && s.back() == '0') s.pop_back();
+                    if (!s.empty() && s.back() == '.') s.pop_back();
+                }
+                if (s.empty()) s = "0";
+            }
+        }
+
+        result.push_back(eval_pb);
+    }
+
+    return result;
+}
+
 static int assign_layer_impl(double obj_fp, double bf, std::vector<double>& target, int strategy) {
     if (strategy == 0) {
         for (size_t k = 0; k < target.size(); k++) {
@@ -516,6 +716,25 @@ static void on_generate_from_imgui() {
         size_t item_start = 1;
         std::vector<double> opt_layer, opt_layer2;
 
+        // 预计算总 item 数（近似，用于 $global.item_count$）
+        int total_items = 0;
+        {
+            size_t t_start = 1;
+            for (size_t t = 0; t < tracks.size(); t++) {
+                if (!tracks[t].selected || tracks[t].count <= 0) {
+                    while (t_start < objdict.pos.size() && objdict.pos[t_start] != -1.0) t_start++;
+                    if (t_start < objdict.pos.size()) t_start++;
+                    continue;
+                }
+                size_t t_end = objdict.pos.size();
+                for (size_t j = t_start + 1; j < objdict.pos.size(); j++)
+                    if (objdict.pos[j] == -1.0) { t_end = j; break; }
+                for (size_t k = t_start; k < t_end; k++)
+                    if (objdict.pos[k] > -0.5) total_items++;
+                t_start = t_end + 1;
+            }
+        }
+
         int bfidx_global = 0;
         int item_count_global = 0;
         int altidx_global = 0;
@@ -553,18 +772,7 @@ static void on_generate_from_imgui() {
                 if (is_sep || at_end) {
                     if (seg_start < i) {
                         // --- 1. 收集 intervals ---
-                        struct Interval {
-                            size_t idx;
-                            double obj_fp, bf;
-                            double pitch;
-                            int sf, ef;
-                            int loop;
-                            double playrate, soffs;
-                            int fileidx;
-                            std::string file_path;
-                            int chord_index = 1;
-                        };
-                        std::vector<Interval> intervals;
+                        std::vector<ItemInterval> intervals;
 
                         for (size_t k = seg_start; k < i; k++) {
                             double pos_sec = objdict.pos[k];
@@ -618,21 +826,33 @@ static void on_generate_from_imgui() {
                             for (size_t k = 0; k < intervals.size(); ) {
                                 size_t j = k;
                                 while (j < intervals.size() && intervals[j].sf == intervals[k].sf) j++;
+                                int count = static_cast<int>(j - k);
                                 int ci = 1;
                                 for (size_t m = k; m < j; m++) {
                                     intervals[m].chord_index = ci++;
+                                    intervals[m].chord_count = count;
                                 }
                                 k = j;
                             }
                         } else {
-                            // 非“全部独立”时 chord_index 恒为 1，和弦映射退化为使用第一个模板
-                            for (auto& iv : intervals) iv.chord_index = 1;
+                            for (auto& iv : intervals) { iv.chord_index = 1; iv.chord_count = 1; }
                         }
+
+                        // 计算轨道音高极值（用于 $note.pitch_ratio$ 等）
+                        double track_pitch_min = 128.0, track_pitch_max = -1.0;
+                        for (const auto& iv : intervals) {
+                            if (iv.pitch > -900.0) {
+                                double p = iv.pitch + 69.0;
+                                if (p < track_pitch_min) track_pitch_min = p;
+                                if (p > track_pitch_max) track_pitch_max = p;
+                            }
+                        }
+                        if (track_pitch_max < 0) { track_pitch_min = 0; track_pitch_max = 0; }
 
                         bool is_gap_only = (config.sync_mode == 3 || config.sync_mode == 4);
                         // --- 2. 仅在间隙生成模式：转换为间隙 intervals ---
                         if (is_gap_only) {
-                            std::vector<Interval> gaps;
+                            std::vector<ItemInterval> gaps;
                             for (size_t g = 0; g + 1 < intervals.size(); g++) {
                                 int gap_sf = intervals[g].ef + 1;
                                 int gap_ef = intervals[g + 1].sf - 1;
@@ -742,6 +962,15 @@ static void on_generate_from_imgui() {
                             std::string tpl_chain = gs->template_pool[tpl_idx].chain;
                             const auto& tpl_bakes = (*gs->bakes_per_tpl)[tpl_idx];
 
+                            // 变量求值：为当前 item 构建变量表并求值 bake 表达式
+                            int pitch_int = static_cast<int>(std::round(iv.pitch + 69.0));
+                            uint32_t item_rand_seed = static_cast<uint32_t>(iv.idx * 100003LL + pitch_int * 10007LL + iv.sf * 17LL);
+                            auto num_vars = build_item_vars(iv.idx, iv, objdict, config, tracks[ti], g_scene_info,
+                                                             item_count_global, total_items,
+                                                             track_pitch_min, track_pitch_max);
+                            auto text_vars = build_item_text_vars(iv.idx, objdict);
+                            auto evaluated_bakes = evaluate_bakes_for_item(tpl_bakes, num_vars, text_vars, item_rand_seed, gs->logger);
+
                             // 翻转预设（全局配置，每 item 动态生成）
                             // 注意：只将非空的翻转 block 注入 alias，不从 UI 传入 effect_block 为空的占位条目
                             std::vector<PresetEntry> item_presets;
@@ -760,7 +989,7 @@ static void on_generate_from_imgui() {
 
                             std::string chain = apply_template_to_item(
                                 tpl_chain, iv.soffs, iv.playrate, iv.loop,
-                                tpl_bakes, item_presets);
+                                evaluated_bakes, item_presets);
 
                             prev_tpl_idx = tpl_idx;
 

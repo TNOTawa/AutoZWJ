@@ -8,6 +8,8 @@
 #include <cstring>
 #include <map>
 #include <set>
+#include <algorithm>
+#include <unordered_map>
 
 bool g_show_effect_editor = false;
 int g_current_template_idx = 0;
@@ -24,8 +26,47 @@ std::vector<std::vector<ParsedEffect>> g_template_effects_per_tpl;
 std::vector<std::vector<ParamBake>> g_param_bakes_per_tpl;
 std::vector<std::vector<PresetEntry>> g_template_presets_per_tpl;
 
+static bool is_known_expr_function(const std::string& s) {
+    size_t p = s.find('(');
+    if (p == std::string::npos || p == 0) return false;
+    std::string name = s.substr(0, p);
+    while (!name.empty() && std::isspace(static_cast<unsigned char>(name.back()))) name.pop_back();
+    static const char* known[] = {
+        "abs","min","max","clamp","floor","ceil","round",
+        "sin","cos","sqrt","pow","rand","rand_int","map_pitch"
+    };
+    for (const char* k : known) {
+        if (name == k) return true;
+    }
+    return false;
+}
+
+static int detect_mode_from_text(const std::string& s) {
+    size_t c = std::count(s.begin(), s.end(), '$');
+    if (c == 0) {
+        // 无 $ 但看起来像函数调用 → 表达式
+        if (is_known_expr_function(s)) return 2;
+        return 0;
+    }
+    if (c == 2 && s.size() >= 2 && s.front() == '$' && s.back() == '$') return 1;
+    return 2;
+}
+
+static const char* get_mode_label(int mode) {
+    switch (mode) {
+        case 0: return u8"[固]";
+        case 1: return u8"[变]";
+        case 2: return u8"[表]";
+        default: return "";
+    }
+}
+
 // ---- 静态状态（持久到会话结束） ----
 static std::vector<bool> s_header_states;
+
+// 输入框动画状态（全局，供聚焦检测使用）
+static std::unordered_map<std::string, float> s_input_anim_widths;
+static std::unordered_map<std::string, float> s_input_anim_heights;
 
 void save_current_template_data() {
     if (g_current_template_idx < 0 || g_current_template_idx >= (int)g_template_pool.size()) return;
@@ -33,6 +74,9 @@ void save_current_template_data() {
         g_template_effects_per_tpl.resize(g_template_pool.size());
         g_param_bakes_per_tpl.resize(g_template_pool.size());
         g_template_presets_per_tpl.resize(g_template_pool.size());
+    }
+    for (auto& pb : g_param_bakes) {
+        pb.value_mode = detect_mode_from_text(pb.param_value);
     }
     g_template_effects_per_tpl[g_current_template_idx] = g_template_effects;
     g_param_bakes_per_tpl[g_current_template_idx] = g_param_bakes;
@@ -96,7 +140,51 @@ void sync_presets_from_config() {
     }
 }
 
-static int find_or_create_bake(int effect_index, const std::string& param_name, const std::string& default_val) {
+static bool is_hidden_param(const std::string& name) {
+    if (name == "Group" || name == "Group2") return true;
+    if (name.find(u8"のプリセット") != std::string::npos) return true;
+    if (name.find("Preset") != std::string::npos) return true;
+    return false;
+}
+
+static bool parse_motion_value(const std::string& val,
+                                std::string* out_start,
+                                std::string* out_end,
+                                std::string* out_rest)
+{
+    size_t c1 = val.find(',');
+    if (c1 == std::string::npos) return false;
+    size_t c2 = val.find(',', c1 + 1);
+    if (c2 == std::string::npos) return false;
+
+    std::string start = val.substr(0, c1);
+    std::string end = val.substr(c1 + 1, c2 - c1 - 1);
+
+    auto trim = [](std::string& s) {
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
+    };
+    trim(start);
+    trim(end);
+
+    try {
+        std::stod(start);
+        std::stod(end);
+    } catch (...) {
+        return false;
+    }
+
+    if (out_start) *out_start = start;
+    if (out_end) *out_end = end;
+    if (out_rest) *out_rest = val.substr(c2);
+    return true;
+}
+
+static int find_or_create_bake(int effect_index, const std::string& param_name,
+                                const std::string& default_val,
+                                bool is_motion = false,
+                                const std::string& motion_end = "")
+{
     for (int i = 0; i < (int)g_param_bakes.size(); i++) {
         if (g_param_bakes[i].effect_index == effect_index && g_param_bakes[i].param_name == param_name) {
             return i;
@@ -106,6 +194,8 @@ static int find_or_create_bake(int effect_index, const std::string& param_name, 
     pb.effect_index = effect_index;
     pb.param_name = param_name;
     pb.param_value = default_val;
+    pb.is_motion = is_motion;
+    pb.motion_end_value = motion_end;
     pb.active = false;
     g_param_bakes.push_back(pb);
     return (int)g_param_bakes.size() - 1;
@@ -138,26 +228,114 @@ static int count_total_active_bakes() {
     return count;
 }
 
-static void render_var_picker_button(const char* id) {
+static void render_var_picker_button(const char* id, std::string& target_value) {
     if (ImGui::ArrowButton(id, ImGuiDir_Down)) {
         ImGui::OpenPopup(id);
     }
     if (ImGui::BeginPopup(id)) {
-        ImGui::TextDisabled("TODO: 预设变量绑定");
+        auto var_item = [&](const char* label, const char* insert_text) {
+            if (ImGui::Selectable(label)) {
+                target_value = insert_text;
+            }
+        };
+        ImGui::TextDisabled("note.*");
+        var_item("note.pitch",        "$note.pitch$");
+        var_item("note.velocity",     "$note.velocity$");
+        var_item("note.index",        "$note.index$");
+        var_item("note.index0",       "$note.index0$");
+        var_item("note.duration",     "$note.duration$");
+        var_item("note.duration_sec", "$note.duration_sec$");
+        var_item("note.start_frame",  "$note.start_frame$");
+        var_item("note.end_frame",    "$note.end_frame$");
+        var_item("note.pitch_ratio",  "$note.pitch_ratio$");
+        var_item("note.pitch_min",    "$note.pitch_min$");
+        var_item("note.pitch_max",    "$note.pitch_max$");
+        var_item("note.bpm",          "$note.bpm$");
+        ImGui::Separator();
+        ImGui::TextDisabled("item.*");
+        var_item("item.position", "$item.position$");
+        var_item("item.length",   "$item.length$");
+        var_item("item.playrate", "$item.playrate$");
+        var_item("item.loop",     "$item.loop$");
+        var_item("item.soffs",    "$item.soffs$");
+        ImGui::Separator();
+        ImGui::TextDisabled("midi.*");
+        var_item("midi.volume",     "$midi.volume$");
+        var_item("midi.pan",        "$midi.pan$");
+        var_item("midi.pitch_bend", "$midi.pitch_bend$");
+        ImGui::Separator();
+        ImGui::TextDisabled("track.*");
+        var_item("track.number", "$track.number$");
+        ImGui::Separator();
+        ImGui::TextDisabled("global.*");
+        var_item("global.fps",        "$global.fps$");
+        var_item("global.width",      "$global.width$");
+        var_item("global.height",     "$global.height$");
+        var_item("global.item_count", "$global.item_count$");
+        ImGui::Separator();
+        ImGui::TextDisabled("chord.*");
+        var_item("chord.index", "$chord.index$");
+        var_item("chord.count", "$chord.count$");
+        ImGui::Separator();
+        ImGui::TextDisabled(u8"文本");
+        var_item("note.lyric", "$note.lyric$");
+        ImGui::Separator();
+        ImGui::TextDisabled(u8"函数");
+        var_item("rand(0, 127)",       "rand(0, 127)");
+        var_item("rand_int(0, 4)",     "rand_int(0, 4)");
+        var_item("map_pitch(0, 100)",  "map_pitch(0, 100)");
+        var_item("abs(x)",             "abs(x)");
+        var_item("clamp(x, lo, hi)",   "clamp(x, lo, hi)");
+        var_item("round(x)",           "round(x)");
         ImGui::EndPopup();
     }
 }
 
-static void render_bake_input(const std::string& label, std::string& value, const char* picker_id) {
-    char buf[256];
+static bool is_input_focused(const std::string& anim_key, float normal_w) {
+    auto it = s_input_anim_widths.find(anim_key);
+    if (it == s_input_anim_widths.end()) return false;
+    return it->second > normal_w + 8.0f;
+}
+
+static void render_bake_input(const std::string& label, std::string& value,
+                               const char* picker_id, const std::string& anim_key,
+                               float normal_w, float max_w)
+{
+    float& cur_w = s_input_anim_widths[anim_key];
+    float& cur_h = s_input_anim_heights[anim_key];
+
+    float frame_h = ImGui::GetFrameHeight();
+
+    float render_w = cur_w > 10.0f ? cur_w : normal_w;
+    float render_h = cur_h > 5.0f ? cur_h : frame_h;
+
+    if (render_w > max_w) render_w = max_w;
+
+    ImGui::SetNextItemWidth(render_w);
+
+    char buf[512];
     std::strncpy(buf, value.c_str(), sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
-    ImGui::SetNextItemWidth(70);
-    if (ImGui::InputText(label.c_str(), buf, sizeof(buf))) {
-        value = buf;
-    }
+
+    ImVec2 size(render_w, render_h);
+    bool changed = ImGui::InputTextMultiline(label.c_str(), buf, sizeof(buf), size);
+    if (changed) value = buf;
+
+    bool is_active = ImGui::IsItemActive();
+
+    float target_w = is_active ? max_w : normal_w;
+    float target_h = is_active ? frame_h * 2.4f : frame_h;
+
+    float dt = ImGui::GetIO().DeltaTime;
+    float speed = 1.0f - std::pow(0.001f, dt * 14.0f);
+    cur_w += (target_w - cur_w) * speed;
+    cur_h += (target_h - cur_h) * speed;
+
+    if (std::abs(cur_w - target_w) < 0.5f) cur_w = target_w;
+    if (std::abs(cur_h - target_h) < 0.5f) cur_h = target_h;
+
     ImGui::SameLine();
-    render_var_picker_button(picker_id);
+    render_var_picker_button(picker_id, value);
 }
 
 struct DisplayItem {
@@ -365,7 +543,7 @@ void render_effect_chain_panel() {
             label += "##effect" + std::to_string(item.effect_index);
 
             int idx = item.effect_index;
-            if (s_header_states.size() <= (size_t)idx) s_header_states.resize(idx + 1, true);
+            if (s_header_states.size() <= (size_t)idx) s_header_states.resize(idx + 1, false);
 
             ImGui::PushID(("effect_hdr" + std::to_string(item.effect_index)).c_str());
 
@@ -377,7 +555,7 @@ void render_effect_chain_panel() {
                 ImGui::SetNextItemOpen(s_header_states[idx], ImGuiCond_Always);
             }
 
-            bool is_open = ImGui::CollapsingHeader(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+            bool is_open = ImGui::CollapsingHeader(label.c_str());
 
             // 关键：只要不是拖拽中，就把 CollapsingHeader 的真实状态写回 s_header_states
             if (!dragging) {
@@ -389,6 +567,12 @@ void render_effect_chain_panel() {
                 for (size_t pi = 0; pi < eff.params.size(); pi++) {
                     auto& param = eff.params[pi];
                     if (processed.count(param.first)) continue;
+
+                    // 隐藏参数过滤
+                    if (is_hidden_param(param.first)) {
+                        processed.insert(param.first);
+                        continue;
+                    }
 
                     if (param.first.size() > 2 &&
                         param.first.substr(param.first.size() - 2) == ".1") {
@@ -404,42 +588,107 @@ void render_effect_chain_panel() {
                     }
 
                     std::string end_val;
-                    bool has_end = has_motion_pair(eff.params, param.first, &end_val);
+                    bool has_dot1_end = has_motion_pair(eff.params, param.first, &end_val);
+
+                    std::string motion_start, motion_end, motion_rest;
+                    bool is_comma_motion = false;
+                    if (!has_dot1_end) {
+                        is_comma_motion = parse_motion_value(param.second, &motion_start, &motion_end, &motion_rest);
+                    }
 
                     ImGui::PushID((int)(item.effect_index * 1000 + pi));
 
-                    int bake_start_idx = find_or_create_bake((int)item.effect_index, param.first, param.second);
-                    bool active = g_param_bakes[bake_start_idx].active;
+                    int bake_idx = find_or_create_bake((int)item.effect_index, param.first,
+                                                        is_comma_motion ? motion_start : param.second,
+                                                        is_comma_motion, is_comma_motion ? motion_end : "");
+                    bool active = g_param_bakes[bake_idx].active;
 
                     if (ImGui::Checkbox("##bake", &active)) {
-                        g_param_bakes[bake_start_idx].active = active;
+                        g_param_bakes[bake_idx].active = active;
                     }
-                    ImGui::SameLine();
-                    ImGui::TextUnformatted(param.first.c_str());
-                    ImGui::SameLine();
 
-                    if (active) {
-                        render_bake_input("##val_start", g_param_bakes[bake_start_idx].param_value,
-                                          "##picker_start");
-                        if (has_end) {
-                            ImGui::SameLine();
-                            ImGui::TextUnformatted(u8"→");
-                            ImGui::SameLine();
-
-                            int bake_end_idx = find_or_create_bake((int)item.effect_index,
-                                                                   param.first + ".1", end_val);
-                            render_bake_input("##val_end", g_param_bakes[bake_end_idx].param_value,
-                                              "##picker_end");
+                    // 参数名截断，防止超长导致横向溢出
+                    auto truncate_name = [](const std::string& s, float max_w) -> std::string {
+                        float w = ImGui::CalcTextSize(s.c_str()).x;
+                        if (w <= max_w) return s;
+                        std::string r = s;
+                        while (!r.empty()) {
+                            unsigned char c = r.back();
+                            r.pop_back();
+                            while (!r.empty() && (static_cast<unsigned char>(r.back()) & 0x80) && !(static_cast<unsigned char>(r.back()) & 0x40)) {
+                                r.pop_back();
+                            }
+                            if (ImGui::CalcTextSize((r + "...").c_str()).x <= max_w) {
+                                return r + "...";
+                            }
                         }
-                    } else {
+                        return "...";
+                    };
+                    std::string display_name = truncate_name(param.first, 70.0f);
+
+                    ImGui::SameLine();
+                    ImGui::TextUnformatted(display_name.c_str());
+
+                    if (!active) {
+                        ImGui::SameLine();
                         std::string display_value = param.second;
-                        if (has_end) display_value += u8" → " + end_val;
+                        if (has_dot1_end) display_value += u8" → " + end_val;
                         ImGui::TextDisabled("= %s", display_value.c_str());
+                    } else {
+                        ImGui::SameLine();
+                        float input_start_x = ImGui::GetCursorPosX();
+
+                        float avail = ImGui::GetContentRegionAvail().x;
+                        float spacing = ImGui::GetStyle().ItemSpacing.x;
+                        float picker_w = 24.0f + spacing;
+                        float max_w = avail - picker_w - 6.0f;
+                        if (max_w < 40.0f) max_w = 40.0f;
+                        float normal_w = max_w * 0.5f;
+
+                        std::string start_key = std::to_string(item.effect_index) + ":" + param.first + ":start";
+                        std::string end_key;
+                        if (is_comma_motion) {
+                            end_key = std::to_string(item.effect_index) + ":" + param.first + ":end";
+                        } else if (has_dot1_end) {
+                            end_key = std::to_string(item.effect_index) + ":" + param.first + ".1";
+                        }
+
+                        bool has_double = is_comma_motion || has_dot1_end;
+
+                        if (has_double) {
+                            // 第一行：起点
+                            render_bake_input("##val_start", g_param_bakes[bake_idx].param_value,
+                                              "##picker_start", start_key, normal_w, max_w);
+
+                            // 第二行：终点，对齐到第一行输入框
+                            ImGui::SetCursorPosX(input_start_x);
+                            float avail2 = ImGui::GetContentRegionAvail().x;
+                            float max_w2 = avail2 - picker_w - 6.0f;
+                            if (max_w2 < 40.0f) max_w2 = 40.0f;
+                            float normal_w2 = max_w2 * 0.5f;
+
+                            if (has_dot1_end) {
+                                int bake_end_idx = find_or_create_bake((int)item.effect_index,
+                                                                       param.first + ".1", end_val);
+                                render_bake_input("##val_end", g_param_bakes[bake_end_idx].param_value,
+                                                  "##picker_end", end_key, normal_w2, max_w2);
+                            } else {
+                                render_bake_input("##val_end", g_param_bakes[bake_idx].motion_end_value,
+                                                  "##picker_end", end_key, normal_w2, max_w2);
+                            }
+                            if (!motion_rest.empty()) {
+                                ImGui::SameLine();
+                                ImGui::TextDisabled("%s", motion_rest.c_str());
+                            }
+                        } else {
+                            render_bake_input("##val", g_param_bakes[bake_idx].param_value,
+                                              "##picker", start_key, normal_w, max_w);
+                        }
                     }
 
                     ImGui::PopID();
                     processed.insert(param.first);
-                    if (has_end) processed.insert(param.first + ".1");
+                    if (has_dot1_end) processed.insert(param.first + ".1");
                 }
             }
             ImGui::PopID();

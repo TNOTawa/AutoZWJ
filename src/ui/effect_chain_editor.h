@@ -13,8 +13,11 @@ struct ParsedEffect {
 struct ParamBake {
     int effect_index = -1;
     std::string param_name;
-    std::string param_value;
+    std::string param_value;   // 用户输入的原始文本（固定值/变量/表达式）
+    int value_mode = 0;        // 0=固定值, 1=变量映射, 2=表达式
     bool active = false;
+    bool is_motion = false;         // 是否为逗号分隔的运动参数
+    std::string motion_end_value;   // 运动参数的终点值（第二个字段）
 };
 
 struct PresetEntry {
