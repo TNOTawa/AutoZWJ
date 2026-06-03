@@ -77,6 +77,12 @@ static std::vector<std::wstring> get_reaper_recent_files_internal() {
         }
     }
 
+    struct RecentEntry {
+        int num;
+        std::wstring path;
+    };
+    std::vector<RecentEntry> entries;
+
     std::istringstream iss(content);
     std::string line;
     bool in_recent = false;
@@ -95,12 +101,18 @@ static std::vector<std::wstring> get_reaper_recent_files_internal() {
             if (eq != std::string::npos) {
                 std::string key = line.substr(0, eq);
                 if (key.find("recent") == 0) {
+                    int num = std::atoi(key.c_str() + 6);
                     std::string val = line.substr(eq + 1);
-                    result.push_back(utf8_to_wide(val));
+                    entries.push_back({num, utf8_to_wide(val)});
                 }
             }
         }
     }
+
+    std::sort(entries.begin(), entries.end(), [](const RecentEntry& a, const RecentEntry& b) {
+        return a.num > b.num;
+    });
+    for (auto& e : entries) result.push_back(e.path);
     return result;
 }
 

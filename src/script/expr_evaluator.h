@@ -394,7 +394,7 @@ private:
             if (args.size() != 2) { error_ = "map_pitch() 需要 2 个参数"; return false; }
             auto it = vars_.find("note.pitch_ratio");
             double ratio = (it != vars_.end()) ? it->second : 0.5;
-            out = (args[0] + args[1]) * ratio;
+            out = args[0] + (args[1] - args[0]) * ratio;
             return true;
         }
         if (name == "rand_int") {

@@ -448,36 +448,9 @@ static std::string build_flip_block(int flip_type, int par, int altidx, int item
 }
 
 static std::string apply_template_to_item(const std::string& template_chain,
-                                            double soffs, double playrate,
-                                            int loop,
                                             const std::vector<ParamBake>& param_bakes,
                                             const std::vector<PresetEntry>& presets) {
     std::string result = template_chain;
-    size_t pos;
-
-    pos = 0;
-    while ((pos = result.find(u8"再生位置=", pos)) != std::string::npos) {
-        size_t end = result.find('\n', pos);
-        if (end == std::string::npos) end = result.size();
-        result.replace(pos, end - pos, u8"再生位置=" + std::to_string((int)soffs));
-        pos++;
-    }
-
-    pos = 0;
-    while ((pos = result.find(u8"再生速度=", pos)) != std::string::npos) {
-        size_t end = result.find('\n', pos);
-        if (end == std::string::npos) end = result.size();
-        result.replace(pos, end - pos, u8"再生速度=" + std::to_string((int)(playrate * 100.0)));
-        pos++;
-    }
-
-    pos = 0;
-    while ((pos = result.find(u8"ループ再生=", pos)) != std::string::npos) {
-        size_t end = result.find('\n', pos);
-        if (end == std::string::npos) end = result.size();
-        result.replace(pos, end - pos, u8"ループ再生=" + std::to_string(loop));
-        pos++;
-    }
 
     inject_param_bakes(result, param_bakes);
     inject_presets(result, presets);
@@ -988,8 +961,7 @@ static void on_generate_from_imgui() {
                             }
 
                             std::string chain = apply_template_to_item(
-                                tpl_chain, iv.soffs, iv.playrate, iv.loop,
-                                evaluated_bakes, item_presets);
+                                tpl_chain, evaluated_bakes, item_presets);
 
                             prev_tpl_idx = tpl_idx;
 

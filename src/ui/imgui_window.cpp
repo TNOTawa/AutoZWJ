@@ -321,6 +321,11 @@ void imgui_window_show_import_page() {
 
 void imgui_window_hide() {
     save_current_template_data();
+    if (g_edit_handle) {
+        g_edit_handle->call_edit_section_param(nullptr, [](void*, EDIT_SECTION* edit) {
+            flush_project_file_state(edit);
+        });
+    }
     g_visible = false;
     if (g_imgui_hwnd) ShowWindow(g_imgui_hwnd, SW_HIDE);
 }

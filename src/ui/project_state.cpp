@@ -10,6 +10,7 @@ void load_project_state_from_project_file(EDIT_SECTION* edit) {
     auto* pf = edit->get_project_file(g_edit_handle);
     if (!pf) return;
 
+    g_project_state_dirty = false;
     g_project_state = ProjectState{};
 
     OutputConfig& cfg = g_project_state.config;
@@ -86,6 +87,7 @@ void flush_project_file_state(EDIT_SECTION* edit) {
 }
 
 void add_file_to_history(const std::wstring& path) {
+    if (path.empty()) return;
     auto it = std::find(g_project_state.file_history.begin(), g_project_state.file_history.end(), path);
     if (it != g_project_state.file_history.end()) {
         g_project_state.file_history.erase(it);
