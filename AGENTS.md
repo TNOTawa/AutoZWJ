@@ -97,10 +97,12 @@ src/
 
 ```powershell
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
-cmake --build build --config Release
+cmake --build build
 
 # 产物: build/AutoZWJ.aux2
 ```
+
+> MinGW Makefiles 为单配置生成器，构建类型由首次 `-DCMAKE_BUILD_TYPE` 锁定到缓存。若需切换 Debug/Release，先删除 `build/CMakeCache.txt` 再重新配置。
 
 ---
 
