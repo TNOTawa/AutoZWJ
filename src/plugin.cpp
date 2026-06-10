@@ -419,26 +419,22 @@ static void inject_presets(std::string& chain, const std::vector<PresetEntry>& p
     chain = out.str();
 }
 
-static std::string build_flip_block(int flip_type, int par, int altidx, int item_count) {
+static std::string build_flip_block(int flip_type, int layer_item_count) {
     std::ostringstream fe;
     fe << "[0.N]\neffect.name=反転\n";
 
     if (flip_type == FLIP_HORIZONTAL) {
-        bool active = (par == 1 && altidx % 2 == 0) ||
-                      (par == 0 && altidx % 2 == 1);
-        fe << "左右反転=" << (active ? "1" : "0") << "\n";
+        fe << "左右反転=" << ((layer_item_count % 2 == 1) ? "1" : "0") << "\n";
         fe << "上下反転=0\n";
     } else if (flip_type == FLIP_VERTICAL) {
-        bool active = (par == 1 && altidx % 2 == 0) ||
-                      (par == 0 && altidx % 2 == 1);
         fe << "左右反転=0\n";
-        fe << "上下反転=" << (active ? "1" : "0") << "\n";
+        fe << "上下反転=" << ((layer_item_count % 2 == 1) ? "1" : "0") << "\n";
     } else if (flip_type == FLIP_CW) {
-        int r = item_count % 4;
+        int r = layer_item_count % 4;
         fe << "左右反転=" << ((r == 1 || r == 2) ? "1" : "0") << "\n";
         fe << "上下反転=" << ((r == 2 || r == 3) ? "1" : "0") << "\n";
     } else if (flip_type == FLIP_CCW) {
-        int r = item_count % 4;
+        int r = layer_item_count % 4;
         fe << "左右反転=" << ((r == 2 || r == 3) ? "1" : "0") << "\n";
         fe << "上下反転=" << ((r == 1 || r == 2) ? "1" : "0") << "\n";
     }
@@ -710,9 +706,8 @@ static void on_generate_from_imgui() {
 
         int bfidx_global = 0;
         int item_count_global = 0;
-        int altidx_global = 0;
         int bpos_global = 0;
-        double prev_pitch = -999.0;
+        std::map<int, int> layer_item_counts;
 
         auto sur_round = [&](double v) -> double {
             return config.use_round_up ? std::ceil(v) : std::round(v);
@@ -854,14 +849,9 @@ static void on_generate_from_imgui() {
                             int pcount = item_count_global;
                             int pbfidx = bfidx_global;
                             int pbpos = bpos_global;
-                            double pprev = prev_pitch;
 
                             for (auto& iv : intervals) {
-                                bool same = std::abs(iv.pitch - pprev) < 0.001;
-                                bool rep = pprev > -999.0 && same;
-                                pprev = iv.pitch;
                                 if (iv.sf == pbpos) pbfidx--;
-                                else if (config.alt_flip && rep) pbfidx--;
                                 int par = (pbfidx + pcount) % 2;
                                 pcount++;
                                 pbpos = iv.sf;
@@ -882,21 +872,10 @@ static void on_generate_from_imgui() {
                         for (size_t iv_idx = 0; iv_idx < intervals.size(); iv_idx++) {
                             auto& iv = intervals[iv_idx];
 
-                            bool same_pitch = (std::abs(iv.pitch - prev_pitch) < 0.001);
-                            bool is_pitch_repeated = (prev_pitch > -999.0 && same_pitch);
-                            prev_pitch = iv.pitch;
-
                             if (iv.sf == bpos_global)
-                                bfidx_global--;
-                            else if (config.alt_flip && is_pitch_repeated)
                                 bfidx_global--;
 
                             int par = (bfidx_global + item_count_global) % 2;
-
-                            if (config.alt_flip && is_pitch_repeated)
-                                altidx_global++;
-                            else if (config.flip_type != FLIP_CW && config.flip_type != FLIP_CCW)
-                                altidx_global = 0;
 
                             bpos_global = iv.sf;
 
@@ -944,12 +923,20 @@ static void on_generate_from_imgui() {
                             auto text_vars = build_item_text_vars(iv.idx, objdict);
                             auto evaluated_bakes = evaluate_bakes_for_item(tpl_bakes, num_vars, text_vars, item_rand_seed, gs->logger);
 
+                            int use_layer;
+                            if (config.even_only)
+                                use_layer = base + (par == 0 ? add_layer * 2 : add_layer * 2 + 1);
+                            else
+                                use_layer = base + add_layer;
+
+                            int layer_count = layer_item_counts[use_layer];
+
                             // 翻转预设（全局配置，每 item 动态生成）
                             // 注意：只将非空的翻转 block 注入 alias，不从 UI 传入 effect_block 为空的占位条目
                             std::vector<PresetEntry> item_presets;
                             if (config.alt_flip && config.flip_type != 0) {
                                 PresetEntry p;
-                                p.effect_block = build_flip_block(config.flip_type, par, altidx_global, item_count_global);
+                                p.effect_block = build_flip_block(config.flip_type, layer_count);
                                 const auto& tpl_presets_ref = (*gs->presets_per_tpl)[tpl_idx];
                                 if (!tpl_presets_ref.empty()) {
                                     p.position = tpl_presets_ref[0].position;
@@ -959,17 +946,12 @@ static void on_generate_from_imgui() {
                                 p.active = true;
                                 item_presets.push_back(p);
                             }
+                            layer_item_counts[use_layer] = layer_count + 1;
 
                             std::string chain = apply_template_to_item(
                                 tpl_chain, evaluated_bakes, item_presets);
 
                             prev_tpl_idx = tpl_idx;
-
-                            int use_layer;
-                            if (config.even_only)
-                                use_layer = base + (par == 0 ? add_layer * 2 : add_layer * 2 + 1);
-                            else
-                                use_layer = base + add_layer;
 
                             std::ostringstream alias;
                             alias << "[0]\nlayer=" << use_layer
