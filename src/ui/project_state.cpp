@@ -24,8 +24,8 @@ void load_project_state_from_project_file(EDIT_SECTION* edit) {
     if (val) cfg.alt_flip = (std::atoi(val) != 0);
     val = pf->get_param_string("rppinexo.flip_type");
     if (val) cfg.flip_type = std::atoi(val);
-    val = pf->get_param_string("rppinexo.even_only");
-    if (val) cfg.even_only = (std::atoi(val) != 0);
+    val = pf->get_param_string("rppinexo.flip_counter_mode");
+    if (val) cfg.flip_counter_mode = std::atoi(val);
     val = pf->get_param_string("rppinexo.adjustment");
     if (val) cfg.adjustment = (std::atoi(val) != 0);
     val = pf->get_param_string("rppinexo.beatless_sync");
@@ -115,7 +115,7 @@ void save_config_to_project_file(EDIT_HANDLE* edit, const OutputConfig& cfg) {
         pf->set_param_string("rppinexo.output_type", std::to_string(cfg->output_type).c_str());
         pf->set_param_string("rppinexo.alt_flip", cfg->alt_flip ? "1" : "0");
         pf->set_param_string("rppinexo.flip_type", std::to_string(cfg->flip_type).c_str());
-        pf->set_param_string("rppinexo.even_only", cfg->even_only ? "1" : "0");
+        pf->set_param_string("rppinexo.flip_counter_mode", std::to_string(cfg->flip_counter_mode).c_str());
         pf->set_param_string("rppinexo.adjustment", cfg->adjustment ? "1" : "0");
         pf->set_param_string("rppinexo.beatless_sync", cfg->beatless_sync ? "1" : "0");
         pf->set_param_string("rppinexo.clipping", std::to_string(cfg->clipping).c_str());

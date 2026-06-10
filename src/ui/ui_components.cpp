@@ -595,13 +595,15 @@ void render_config_panel() {
         else if (flip_idx == 1) cfg.flip_type = FLIP_VERTICAL;
         else if (flip_idx == 2) cfg.flip_type = FLIP_CW;
         else cfg.flip_type = FLIP_CCW;
+
+        static const char* counter_modes[] = { u8"全部", u8"图层" };
+        ImGui::SetNextItemWidth(100);
+        ImGui::Combo(u8"计数模式", &cfg.flip_counter_mode, counter_modes, 2);
         ImGui::Unindent(16);
     }
     if (flip_highlight) {
         ImGui::PopStyleColor(6);
     }
-
-    ImGui::Checkbox(u8"偶数项换行", &cfg.even_only);
     ImGui::Checkbox(u8"无节拍同步", &cfg.beatless_sync);
     ImGui::Checkbox(u8"向上取整帧", &cfg.use_round_up);
 
@@ -624,8 +626,8 @@ void render_config_panel() {
         ImGui::Unindent(16);
     }
 
-    static const char* layer_strategy_labels[] = { u8"优化模式", u8"持续累加模式" };
-    ImGui::Combo(u8"层分配策略", &cfg.layer_strategy, layer_strategy_labels, 2);
+    static const char* layer_strategy_labels[] = { u8"优化模式", u8"持续累加模式", u8"交替换行" };
+    ImGui::Combo(u8"层分配策略", &cfg.layer_strategy, layer_strategy_labels, 3);
     ImGui::Checkbox(u8"反转轨道顺序", &cfg.reverse_layer_order);
 
     static const char* track_filter_labels[] = { u8"全部独立", u8"仅取第N轨", u8"仅取倒数第N轨" };

@@ -56,7 +56,7 @@ struct OutputConfig {
     int output_type = 0;
     bool alt_flip = false;
     int flip_type = 0;
-    bool even_only = false;
+    int flip_counter_mode = 0;  // 0=全部, 1=图层
     bool adjustment = false;
     bool beatless_sync = false;
     bool no_gap = true;
@@ -72,7 +72,7 @@ struct OutputConfig {
     // Phase 5: 物件与音符同步
     int sync_mode = 1;          // 0=与音符对齐, 1=拉伸到下一音符, 2=拉伸到固定值, 3=仅在间隙生成, 4=仅在间隙并拉伸固定值
     int fixed_duration_frames = 30;
-    int layer_strategy = 0;     // 0=优化模式, 1=持续累加模式
+    int layer_strategy = 0;     // 0=优化模式, 1=持续累加模式, 2=交替换行
     bool reverse_layer_order = false;
     int track_filter_mode = 0;  // 0=全部独立, 1=仅取第N轨, 2=仅取倒数第N轨
     int track_filter_n = 1;

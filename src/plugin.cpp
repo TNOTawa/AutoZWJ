@@ -856,7 +856,7 @@ static void on_generate_from_imgui() {
                                 pcount++;
                                 pbpos = iv.sf;
 
-                                auto& ptarget = (config.even_only && par == 1) ? popt2 : popt;
+                                auto& ptarget = (config.layer_strategy == 2 && par == 1) ? popt2 : popt;
                                 int dl = assign_layer_impl((double)iv.sf, (double)iv.ef, ptarget, config.layer_strategy);
                                 pre_layers.push_back(dl);
                             }
@@ -879,28 +879,6 @@ static void on_generate_from_imgui() {
 
                             bpos_global = iv.sf;
 
-                            // 层分配（使用整数帧避免浮点精度导致的重叠误判）
-                            auto& target = (config.even_only && par == 1) ? opt_layer2 : opt_layer;
-                            int add_layer = assign_layer_impl((double)iv.sf, (double)iv.ef, target, config.layer_strategy);
-
-                            // 反转轨道顺序
-                            if (config.reverse_layer_order) {
-                                add_layer = max_layer - add_layer;
-                            }
-
-                            // 过滤
-                            if (config.track_filter_mode != 0) {
-                                int dl = pre_layers[iv_idx];
-                                if (config.track_filter_mode == 1 && dl + 1 != config.track_filter_n) {
-                                    item_count_global++;
-                                    continue;
-                                }
-                                if (config.track_filter_mode == 2 && dl != max_layer - config.track_filter_n + 1) {
-                                    item_count_global++;
-                                    continue;
-                                }
-                            }
-
                             // 选择模板
                             int tpl_idx = 0;
                             if (pool_size > 1) {
@@ -914,7 +892,7 @@ static void on_generate_from_imgui() {
                             std::string tpl_chain = gs->template_pool[tpl_idx].chain;
                             const auto& tpl_bakes = (*gs->bakes_per_tpl)[tpl_idx];
 
-                            // 变量求值：为当前 item 构建变量表并求值 bake 表达式
+                            // 变量求值
                             int pitch_int = static_cast<int>(std::round(iv.pitch + 69.0));
                             uint32_t item_rand_seed = static_cast<uint32_t>(iv.idx * 100003LL + pitch_int * 10007LL + iv.sf * 17LL);
                             auto num_vars = build_item_vars(iv.idx, iv, objdict, config, tracks[ti], g_scene_info,
@@ -923,30 +901,92 @@ static void on_generate_from_imgui() {
                             auto text_vars = build_item_text_vars(iv.idx, objdict);
                             auto evaluated_bakes = evaluate_bakes_for_item(tpl_bakes, num_vars, text_vars, item_rand_seed, gs->logger);
 
-                            int use_layer;
-                            if (config.even_only)
-                                use_layer = base + (par == 0 ? add_layer * 2 : add_layer * 2 + 1);
-                            else
-                                use_layer = base + add_layer;
-
-                            int layer_count = layer_item_counts[use_layer];
-
-                            // 翻转预设（全局配置，每 item 动态生成）
-                            // 注意：只将非空的翻转 block 注入 alias，不从 UI 传入 effect_block 为空的占位条目
+                            // 翻转判定与图层分配
                             std::vector<PresetEntry> item_presets;
-                            if (config.alt_flip && config.flip_type != 0) {
-                                PresetEntry p;
-                                p.effect_block = build_flip_block(config.flip_type, layer_count);
-                                const auto& tpl_presets_ref = (*gs->presets_per_tpl)[tpl_idx];
-                                if (!tpl_presets_ref.empty()) {
-                                    p.position = tpl_presets_ref[0].position;
-                                } else {
-                                    p.position = -1;
+                            int use_layer;
+
+                            if (config.flip_counter_mode == 0) {
+                                // 全部模式: 先翻转
+                                int flip_count = item_count_global;
+                                if (config.alt_flip && config.flip_type != 0) {
+                                    PresetEntry p;
+                                    p.effect_block = build_flip_block(config.flip_type, flip_count);
+                                    const auto& tpl_presets_ref = (*gs->presets_per_tpl)[tpl_idx];
+                                    if (!tpl_presets_ref.empty()) {
+                                        p.position = tpl_presets_ref[0].position;
+                                    } else {
+                                        p.position = -1;
+                                    }
+                                    p.active = true;
+                                    item_presets.push_back(p);
                                 }
-                                p.active = true;
-                                item_presets.push_back(p);
+
+                                // 再图层分配
+                                auto& target = (config.layer_strategy == 2 && par == 1) ? opt_layer2 : opt_layer;
+                                int add_layer = assign_layer_impl((double)iv.sf, (double)iv.ef, target, config.layer_strategy);
+
+                                if (config.reverse_layer_order) {
+                                    add_layer = max_layer - add_layer;
+                                }
+
+                                if (config.track_filter_mode != 0) {
+                                    int dl = pre_layers[iv_idx];
+                                    if (config.track_filter_mode == 1 && dl + 1 != config.track_filter_n) {
+                                        item_count_global++;
+                                        continue;
+                                    }
+                                    if (config.track_filter_mode == 2 && dl != max_layer - config.track_filter_n + 1) {
+                                        item_count_global++;
+                                        continue;
+                                    }
+                                }
+
+                                if (config.layer_strategy == 2)
+                                    use_layer = base + (par == 0 ? add_layer * 2 : add_layer * 2 + 1);
+                                else
+                                    use_layer = base + add_layer;
+                            } else {
+                                // 图层模式: 先图层分配
+                                auto& target = (config.layer_strategy == 2 && par == 1) ? opt_layer2 : opt_layer;
+                                int add_layer = assign_layer_impl((double)iv.sf, (double)iv.ef, target, config.layer_strategy);
+
+                                if (config.reverse_layer_order) {
+                                    add_layer = max_layer - add_layer;
+                                }
+
+                                if (config.track_filter_mode != 0) {
+                                    int dl = pre_layers[iv_idx];
+                                    if (config.track_filter_mode == 1 && dl + 1 != config.track_filter_n) {
+                                        item_count_global++;
+                                        continue;
+                                    }
+                                    if (config.track_filter_mode == 2 && dl != max_layer - config.track_filter_n + 1) {
+                                        item_count_global++;
+                                        continue;
+                                    }
+                                }
+
+                                if (config.layer_strategy == 2)
+                                    use_layer = base + (par == 0 ? add_layer * 2 : add_layer * 2 + 1);
+                                else
+                                    use_layer = base + add_layer;
+
+                                // 再翻转
+                                int layer_count = layer_item_counts[use_layer];
+                                if (config.alt_flip && config.flip_type != 0) {
+                                    PresetEntry p;
+                                    p.effect_block = build_flip_block(config.flip_type, layer_count);
+                                    const auto& tpl_presets_ref = (*gs->presets_per_tpl)[tpl_idx];
+                                    if (!tpl_presets_ref.empty()) {
+                                        p.position = tpl_presets_ref[0].position;
+                                    } else {
+                                        p.position = -1;
+                                    }
+                                    p.active = true;
+                                    item_presets.push_back(p);
+                                }
+                                layer_item_counts[use_layer] = layer_count + 1;
                             }
-                            layer_item_counts[use_layer] = layer_count + 1;
 
                             std::string chain = apply_template_to_item(
                                 tpl_chain, evaluated_bakes, item_presets);
