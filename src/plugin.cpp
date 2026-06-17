@@ -457,6 +457,7 @@ static std::string apply_template_to_item(const std::string& template_chain,
 // 生成循环中使用的 interval 结构（定义在 lambda 外以便 build_item_vars 可见）
 struct ItemInterval {
     size_t idx;
+    double pos_sec;
     double obj_fp, bf;
     double pitch;
     int sf, ef;
@@ -490,8 +491,8 @@ static std::unordered_map<std::string, double> build_item_vars(
     vars["note.index0"]       = static_cast<double>(item_count_global);
     vars["note.duration"]     = std::round(objdict.length[item_idx] * fps);
     vars["note.duration_sec"] = objdict.length[item_idx];
-    vars["note.start_frame"]  = std::round(objdict.pos[item_idx] * fps) + 1.0;
-    vars["note.end_frame"]    = std::round((objdict.pos[item_idx] + objdict.length[item_idx]) * fps);
+    vars["note.start_frame"]  = std::round(interval.pos_sec * fps) + 1.0;
+    vars["note.end_frame"]    = std::round((interval.pos_sec + objdict.length[item_idx]) * fps);
     vars["note.bpm"]          = objdict.bpm;
 
     double pitch_val = objdict.pitch[item_idx] + 69.0;
@@ -502,7 +503,7 @@ static std::unordered_map<std::string, double> build_item_vars(
     else
         vars["note.pitch_ratio"] = 0.5;
 
-    vars["item.position"]  = objdict.pos[item_idx];
+    vars["item.position"]  = interval.pos_sec;
     vars["item.length"]    = objdict.length[item_idx];
     vars["item.playrate"]  = objdict.playrate[item_idx];
     vars["item.loop"]      = static_cast<double>(objdict.loop[item_idx]);
@@ -743,7 +744,7 @@ static void on_generate_from_imgui() {
                         std::vector<ItemInterval> intervals;
 
                         for (size_t k = seg_start; k < i; k++) {
-                            double pos_sec = objdict.pos[k];
+                            double pos_sec = objdict.pos[k] + config.base_time_sec;
                             double len_sec = objdict.length[k];
                             double pitch = objdict.pitch[k];
 
@@ -785,7 +786,7 @@ static void on_generate_from_imgui() {
                             if (fileidx >= 0 && fileidx < (int)objdict.filelist.size())
                                 file_path = objdict.filelist[fileidx];
 
-                            intervals.push_back({k, obj_fp, bf, pitch, sf, ef,
+                            intervals.push_back({k, pos_sec, obj_fp, bf, pitch, sf, ef,
                                 objdict.loop[k], objdict.playrate[k], objdict.soffs[k], fileidx, file_path});
                         }
 
@@ -833,7 +834,9 @@ static void on_generate_from_imgui() {
                                     } else {
                                         gap_ef_final = gap_ef;
                                     }
-                                    gaps.push_back({intervals[g].idx, gap_fp, (double)gap_ef_final, -999.0,
+                                    gaps.push_back({intervals[g].idx,
+                                        (gap_sf - 1.0) / fps,
+                                        (double)gap_sf, (double)gap_ef_final, -999.0,
                                         gap_sf, gap_ef_final, 0, 1.0, 0.0, -1, ""});
                                 }
                             }
@@ -1058,7 +1061,7 @@ static void on_open_config(EDIT_SECTION* edit) {
         if (!g_project_state.file_path.empty()) {
             path_to_load = g_project_state.file_path;
         } else if (!g_project_state.file_history.empty()) {
-            path_to_load = g_project_state.file_history[0];
+            path_to_load = g_project_state.file_history[0].path;
         }
         if (!path_to_load.empty()) {
             parse_project_file(path_to_load);

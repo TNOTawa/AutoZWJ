@@ -28,6 +28,14 @@ struct ObjDict {
     int track_count = 0;
 };
 
+// TODO: 重构时将所有 PROJECT_FILE 键名 rppinexo.* 统一替换为 autozwj.*。
+//      当前出于兼容性考虑暂不替换，新功能继续沿用 rppinexo.* 前缀。
+
+struct FileHistoryEntry {
+    std::wstring path;
+    double base_time_sec = 0.0;
+};
+
 struct TrackNode {
     std::wstring name;
     int number = 0;
@@ -81,6 +89,8 @@ struct OutputConfig {
     int mapping_strategy = 1;            // 1=顺序轮替, 2=随机抽选, 3=和弦映射
     int mapping_sequential_order = 0;    // 0=顺序, 1=倒序, 2=洗牌
     bool mapping_no_consecutive = false; // 随机抽选：禁止连续重复
+
+    double base_time_sec = 0.0;
 };
 
 struct EffectParam {
@@ -106,7 +116,7 @@ struct ProjectState {
     OutputConfig config;
     std::string template_alias;
     int template_layer = 0;
-    std::vector<std::wstring> file_history;
+    std::vector<FileHistoryEntry> file_history;
 };
 
 struct SceneInfo {
@@ -140,6 +150,7 @@ void save_project_file_path_and_history(EDIT_SECTION* edit);
 void flush_project_file_state(EDIT_SECTION* edit);
 void add_file_to_history(const std::wstring& path);
 void remove_file_from_history(int index);
+void update_current_project_offset(double offset);
 void sync_scene_info();
 
 std::string extract_template_chain(const std::string& alias);

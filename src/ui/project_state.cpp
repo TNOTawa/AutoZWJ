@@ -1,3 +1,6 @@
+// TODO: 重构时将所有 PROJECT_FILE 键名 rppinexo.* 统一替换为 autozwj.*。
+//      当前出于兼容性考虑暂不替换，新功能继续沿用 rppinexo.* 前缀。
+
 #include "plugin.h"
 #include "rpp/rpp_parser.h"
 #include "midi/midi_parser.h"
@@ -46,9 +49,6 @@ void load_project_state_from_project_file(EDIT_SECTION* edit) {
     val = pf->get_param_string("rppinexo.last_directory");
     if (val) g_project_state.last_directory = utf8_to_wide(val);
 
-    val = pf->get_param_string("rppinexo.file_path");
-    if (val) g_project_state.file_path = utf8_to_wide(val);
-
     val = pf->get_param_string("rppinexo.history_count");
     int count = val ? std::atoi(val) : 0;
     if (count < 0) count = 0;
@@ -58,7 +58,24 @@ void load_project_state_from_project_file(EDIT_SECTION* edit) {
         std::string key = "rppinexo.history_" + std::to_string(i);
         val = pf->get_param_string(key.c_str());
         if (val && val[0]) {
-            g_project_state.file_history.push_back(utf8_to_wide(val));
+            FileHistoryEntry entry;
+            entry.path = utf8_to_wide(val);
+            std::string offset_key = "rppinexo.history_offset_" + std::to_string(i);
+            auto oval = pf->get_param_string(offset_key.c_str());
+            if (oval && oval[0]) {
+                entry.base_time_sec = std::atof(oval);
+            }
+            g_project_state.file_history.push_back(entry);
+        }
+    }
+
+    val = pf->get_param_string("rppinexo.file_path");
+    if (val) g_project_state.file_path = utf8_to_wide(val);
+
+    for (auto& entry : g_project_state.file_history) {
+        if (entry.path == g_project_state.file_path) {
+            g_project_state.config.base_time_sec = entry.base_time_sec;
+            break;
         }
     }
 
@@ -73,10 +90,13 @@ void save_project_file_path_and_history(EDIT_SECTION* edit) {
     pf->set_param_string("rppinexo.history_count", std::to_string(count).c_str());
     for (int i = 0; i < 10; i++) {
         std::string key = "rppinexo.history_" + std::to_string(i);
+        std::string offset_key = "rppinexo.history_offset_" + std::to_string(i);
         if (i < count) {
-            pf->set_param_string(key.c_str(), wide_to_utf8(g_project_state.file_history[i]).c_str());
+            pf->set_param_string(key.c_str(), wide_to_utf8(g_project_state.file_history[i].path).c_str());
+            pf->set_param_string(offset_key.c_str(), std::to_string(g_project_state.file_history[i].base_time_sec).c_str());
         } else {
             pf->set_param_string(key.c_str(), "");
+            pf->set_param_string(offset_key.c_str(), "");
         }
     }
 }
@@ -89,11 +109,12 @@ void flush_project_file_state(EDIT_SECTION* edit) {
 
 void add_file_to_history(const std::wstring& path) {
     if (path.empty()) return;
-    auto it = std::find(g_project_state.file_history.begin(), g_project_state.file_history.end(), path);
+    auto it = std::find_if(g_project_state.file_history.begin(), g_project_state.file_history.end(),
+        [&](const FileHistoryEntry& e) { return e.path == path; });
     if (it != g_project_state.file_history.end()) {
         g_project_state.file_history.erase(it);
     }
-    g_project_state.file_history.insert(g_project_state.file_history.begin(), path);
+    g_project_state.file_history.insert(g_project_state.file_history.begin(), FileHistoryEntry{path, g_project_state.config.base_time_sec});
     if (g_project_state.file_history.size() > 10) {
         g_project_state.file_history.resize(10);
     }
@@ -103,6 +124,23 @@ void add_file_to_history(const std::wstring& path) {
 void remove_file_from_history(int index) {
     if (index < 0 || index >= (int)g_project_state.file_history.size()) return;
     g_project_state.file_history.erase(g_project_state.file_history.begin() + index);
+    g_project_state_dirty = true;
+}
+
+void update_current_project_offset(double offset) {
+    g_project_state.config.base_time_sec = offset;
+    auto& file_path = g_project_state.file_path;
+    if (file_path.empty()) return;
+    auto it = std::find_if(g_project_state.file_history.begin(), g_project_state.file_history.end(),
+        [&](const FileHistoryEntry& e) { return e.path == file_path; });
+    if (it != g_project_state.file_history.end()) {
+        it->base_time_sec = offset;
+    } else {
+        g_project_state.file_history.insert(g_project_state.file_history.begin(), FileHistoryEntry{file_path, offset});
+        if (g_project_state.file_history.size() > 10) {
+            g_project_state.file_history.resize(10);
+        }
+    }
     g_project_state_dirty = true;
 }
 
@@ -138,6 +176,14 @@ bool parse_project_file(const std::wstring& file_path) {
     size_t sep = file_path.find_last_of(L'\\');
     g_project_state.file_name = (sep != std::wstring::npos) ? file_path.substr(sep + 1) : file_path;
 
+    bool existed = false;
+    for (auto& entry : g_project_state.file_history) {
+        if (entry.path == file_path) {
+            existed = true;
+            break;
+        }
+    }
+
     g_project_state.tracks.clear();
     g_project_state.objdict = ObjDict{};
     std::vector<std::string> file_paths;
@@ -156,6 +202,16 @@ bool parse_project_file(const std::wstring& file_path) {
         g_project_state.objdict.filelist = file_paths;
         g_project_state.has_data = true;
         deselect_all_tracks();
+        if (existed) {
+            for (auto& entry : g_project_state.file_history) {
+                if (entry.path == file_path) {
+                    g_project_state.config.base_time_sec = entry.base_time_sec;
+                    break;
+                }
+            }
+        } else {
+            g_project_state.config.base_time_sec = 0.0;
+        }
         add_file_to_history(file_path);
     }
     return ok;

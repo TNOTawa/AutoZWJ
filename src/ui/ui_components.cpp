@@ -381,6 +381,15 @@ void render_import_page() {
     ImGui::Spacing();
     ImGui::Separator();
 
+    ImGui::Text(u8"导入选项");
+    ImGui::Separator();
+    if (ImGui::InputDouble(u8"基准时间（秒）", &g_project_state.config.base_time_sec, 0.1, 1.0, "%.1f")) {
+        update_current_project_offset(g_project_state.config.base_time_sec);
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+
     // --- 轨道树（可滚动区域，留空间给底部按钮）---
     float button_height = 45.0f;
     float avail_h = ImGui::GetContentRegionAvail().y - button_height - ImGui::GetStyle().ItemSpacing.y;
@@ -447,7 +456,7 @@ static void render_header_panel() {
             ImGui::TextDisabled(u8"历史记录");
         }
         for (int i = 0; i < (int)g_project_state.file_history.size(); i++) {
-            const std::wstring& path = g_project_state.file_history[i];
+            const std::wstring& path = g_project_state.file_history[i].path;
             std::string name = wide_to_utf8(path);
             size_t sep = name.find_last_of("\\/");
             std::string display = (sep != std::string::npos) ? name.substr(sep + 1) : name;
