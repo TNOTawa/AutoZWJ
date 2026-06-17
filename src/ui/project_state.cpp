@@ -1,6 +1,7 @@
 #include "plugin.h"
 #include "rpp/rpp_parser.h"
 #include "midi/midi_parser.h"
+#include "lrc/lrc_parser.h"
 #include <algorithm>
 
 static bool g_project_state_dirty = false;
@@ -147,6 +148,8 @@ bool parse_project_file(const std::wstring& file_path) {
         ok = parse_rpp_auto(path_utf8, g_project_state.objdict, g_project_state.tracks, file_paths, warnings);
     } else if (lower.find(".mid") != std::string::npos) {
         ok = parse_midi(path_utf8, g_project_state.objdict, g_project_state.tracks, file_paths);
+    } else if (lower.find(".lrc") != std::string::npos) {
+        ok = parse_lrc(path_utf8, g_project_state.objdict, g_project_state.tracks, file_paths);
     }
 
     if (ok) {

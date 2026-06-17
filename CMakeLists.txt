@@ -14,6 +14,7 @@ add_library(AutoZWJ SHARED
     src/plugin.cpp
     src/rpp/rpp_parser.cpp
     src/midi/midi_parser.cpp
+    src/lrc/lrc_parser.cpp
     src/exo/object_generator.cpp
     src/effect/effect_dict.cpp
     src/ui/file_picker.cpp
