@@ -144,7 +144,7 @@ static void render_frame() {
     ImGui::End();
     ImGui::Render();
 
-    float clear_color[4] = { 0.15f, 0.15f, 0.15f, 1.0f };
+    float clear_color[4] = { UI::COL_BG_DEEPEST.x, UI::COL_BG_DEEPEST.y, UI::COL_BG_DEEPEST.z, 1.0f };
     g_d3d_context->OMSetRenderTargets(1, &g_rtv, nullptr);
     g_d3d_context->ClearRenderTargetView(g_rtv, clear_color);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -200,7 +200,7 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
     if (!RegisterClassExW(&g_wc)) return false;
 
     g_imgui_hwnd = CreateWindowExW(
-        0, L"AutoZWJ_Window", L"AutoZWJ - 配置导入参数",
+        0, L"AutoZWJ_Window", L"AutoZWJ",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 1127, 650,
         host_window, nullptr, hinst, nullptr);
@@ -269,11 +269,7 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
         }
     }
 
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.ItemSpacing.y = UI::ITEM_SPACING_Y;
-    style.FramePadding.y = UI::FRAME_PADDING_Y;
-
-    ImGui::StyleColorsDark();
+    UI::ApplyTheme(ImGui::GetStyle());
 
     ImGui_ImplWin32_Init(g_imgui_hwnd);
     ImGui_ImplDX11_Init(g_d3d_device, g_d3d_context);
@@ -305,6 +301,7 @@ void imgui_window_show() {
     SetForegroundWindow(g_imgui_hwnd);
     g_visible = true;
     InvalidateRect(g_imgui_hwnd, nullptr, FALSE);
+    SetWindowTextW(g_imgui_hwnd, L"AutoZWJ");
     render_frame();
 }
 
@@ -316,6 +313,7 @@ void imgui_window_show_import_page() {
     SetForegroundWindow(g_imgui_hwnd);
     g_visible = true;
     InvalidateRect(g_imgui_hwnd, nullptr, FALSE);
+    SetWindowTextW(g_imgui_hwnd, L"AutoZWJ");
     render_frame();
 }
 

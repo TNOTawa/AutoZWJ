@@ -117,6 +117,31 @@ static std::vector<std::wstring> get_reaper_recent_files_internal() {
 }
 
 // ---------------------------------------------------------------------------
+// 幽灵按钮（暗底 + 白字 + 白边框）
+// ---------------------------------------------------------------------------
+static bool GhostButton(const char* label, const ImVec2& size = ImVec2(0,0)) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_BG_ELEVATED);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_BG_SURFACE_ACTIVE);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+    bool ret = ImGui::Button(label, size);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+    return ret;
+}
+
+static bool GhostSmallButton(const char* label) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_BG_ELEVATED);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_BG_SURFACE_ACTIVE);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+    bool ret = ImGui::SmallButton(label);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+    return ret;
+}
+
+// ---------------------------------------------------------------------------
 // 轨道树（复用组件，制表符直角分支可视化）
 // ---------------------------------------------------------------------------
 static void render_flat_track_node(size_t idx, bool read_only) {
@@ -180,19 +205,24 @@ static void render_flat_track_node(size_t idx, bool read_only) {
     }
     ImGui::PopStyleVar();
 
+    // 选中指示：最左侧蓝色竖线
+    if (node.selected) {
+        ImVec2 rmin = ImGui::GetItemRectMin();
+        ImVec2 rmax = ImGui::GetItemRectMax();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(
+            ImVec2(rmin.x, rmin.y + 3),
+            ImVec2(rmin.x + 3, rmax.y - 3),
+            ImGui::GetColorU32(UI::COL_ACCENT),
+            1.5f
+        );
+    }
+
     // 在同一行渲染文本
     ImGui::SameLine();
     ImVec2 text_pos = ImGui::GetCursorScreenPos();
     float text_y_offset = (line_h - ImGui::GetTextLineHeight()) * 0.5f;
     ImGui::SetCursorScreenPos(ImVec2(text_pos.x, cursor_start.y + text_y_offset));
-
-    // 勾选标记
-    if (node.selected) {
-        ImGui::TextUnformatted(u8"\u2713 ");
-    } else {
-        ImGui::TextUnformatted("   ");
-    }
-    ImGui::SameLine();
 
     // 前缀（分支线，灰色）
     ImGui::PushStyleColor(ImGuiCol_Text, UI::COL_TREE_BRANCH);
@@ -238,11 +268,11 @@ void render_track_tree(bool read_only) {
     ImGui::SameLine();
 
     if (!read_only) {
-        if (ImGui::SmallButton(u8"全选")) select_all_tracks();
+        if (GhostSmallButton(u8"全选")) select_all_tracks();
         ImGui::SameLine();
-        if (ImGui::SmallButton(u8"取消")) deselect_all_tracks();
+        if (GhostSmallButton(u8"取消")) deselect_all_tracks();
         ImGui::SameLine();
-        if (ImGui::SmallButton(u8"反选")) invert_track_selection();
+        if (GhostSmallButton(u8"反选")) invert_track_selection();
     } else {
         ImGui::TextDisabled(u8"(只读预览)");
     }
@@ -285,15 +315,15 @@ void render_nav_bar() {
     }
 
     if (g_show_effect_editor) {
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.35f, 0.50f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.40f, 0.40f, 0.55f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.28f, 0.28f, 0.42f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, UI::COL_ACCENT);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_ACCENT_HOVER);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_ACCENT_ACTIVE);
     } else {
         ImGui::PushStyleColor(ImGuiCol_Button, UI::COL_EFFECT_CHAIN_BG);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.35f, 0.50f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.22f, 0.35f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_EFFECT_CHAIN_HOVER);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_EFFECT_CHAIN_ACTIVE);
     }
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, UI::COL_TEXT_PRIMARY);
 
     if (g_font_bold && g_font_bold != g_font_normal) {
         ImGui::PushFont(g_font_bold);
@@ -331,7 +361,7 @@ void render_import_page() {
         }
     }
 
-    if (ImGui::Button(u8"刷新")) {
+    if (GhostButton(u8"刷新")) {
         recent_files = get_reaper_recent_files_internal();
         selected_recent_idx = -1;
     }
@@ -366,7 +396,7 @@ void render_import_page() {
     }
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"浏览...")) {
+    if (GhostButton(u8"浏览...")) {
         std::wstring init_dir = load_last_directory();
         show_file_picker(GetActiveWindow(), [](const std::wstring& path) {
             if (parse_project_file(path)) {
@@ -488,7 +518,7 @@ static void render_header_panel() {
         ImGui::TextDisabled(u8"(从下拉框选择历史工程，或导入新工程)");
     } else if (!g_project_state.has_data) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f),
+        ImGui::TextColored(UI::COL_HINT_TEXT,
             u8"（文件 \u2192 工程导入页面）");
     }
 }
@@ -510,14 +540,14 @@ void render_config_page() {
         ImGui::SetColumnWidth(0, avail_w * 0.50f);
 
         // 左列
-        ImGui::BeginChild("ConfigLeft", ImVec2(0, avail_h), false);
+        ImGui::BeginChild("ConfigLeft", ImVec2(0, avail_h), true);
         render_track_tree(false);
         ImGui::EndChild();
 
         ImGui::NextColumn();
 
         // 右列
-        ImGui::BeginChild("ConfigRight", ImVec2(0, avail_h), false);
+        ImGui::BeginChild("ConfigRight", ImVec2(0, avail_h), true);
         render_config_panel();
         ImGui::EndChild();
     } else {
@@ -531,21 +561,21 @@ void render_config_page() {
         ImGui::SetColumnWidth(1, mid_w);
 
         // 左列：轨道树
-        ImGui::BeginChild("ConfigLeft", ImVec2(0, avail_h), false);
+        ImGui::BeginChild("ConfigLeft", ImVec2(0, avail_h), true);
         render_track_tree(false);
         ImGui::EndChild();
 
         ImGui::NextColumn();
 
         // 中列：参数编辑
-        ImGui::BeginChild("ConfigMid", ImVec2(0, avail_h), false);
+        ImGui::BeginChild("ConfigMid", ImVec2(0, avail_h), true);
         render_config_panel();
         ImGui::EndChild();
 
         ImGui::NextColumn();
 
         // 右列：效果链编辑器
-        ImGui::BeginChild("ConfigRight", ImVec2(0, avail_h), false);
+        ImGui::BeginChild("ConfigRight", ImVec2(0, avail_h), true);
         render_effect_chain_panel();
         ImGui::EndChild();
     }
@@ -577,12 +607,12 @@ void render_config_panel() {
 
     bool flip_highlight = (g_highlight_param_id == "flip_config" && g_highlight_timer > 0);
     if (flip_highlight) {
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.25f, 0.35f, 0.55f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.30f, 0.40f, 0.60f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.35f, 0.45f, 0.65f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.35f, 0.55f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.30f, 0.40f, 0.60f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.35f, 0.45f, 0.65f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, UI::COL_FLIP_FRAME);
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, UI::COL_FLIP_FRAME_HOVER);
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, UI::COL_FLIP_FRAME_ACTIVE);
+        ImGui::PushStyleColor(ImGuiCol_Header, UI::COL_FLIP_HEADER);
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, UI::COL_FLIP_HEADER_HOVER);
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, UI::COL_FLIP_HEADER_ACTIVE);
     }
     ImGui::Checkbox(u8"交替翻转", &cfg.alt_flip);
     if (cfg.alt_flip) {
@@ -686,7 +716,7 @@ void render_config_panel() {
         if (strategy_idx == 2) {
             ImGui::Indent(24);
             if (cfg.track_filter_mode != 0) {
-                ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.3f, 1.0f), u8"⚠ 需要多音符策略设为“全部独立”");
+                ImGui::TextColored(UI::COL_WARNING_TEXT, u8"⚠ 需要多音符策略设为“全部独立”");
             } else {
                 ImGui::TextDisabled(u8"使用和弦位置分配模板");
             }

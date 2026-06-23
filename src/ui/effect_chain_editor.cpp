@@ -22,6 +22,17 @@ int g_highlight_timer = 0;
 std::vector<std::string> g_template_aliases;
 bool g_template_effects_dirty = true;
 
+static bool GhostSmallButton(const char* label) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_BG_ELEVATED);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_BG_SURFACE_ACTIVE);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+    bool ret = ImGui::SmallButton(label);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+    return ret;
+}
+
 std::vector<std::vector<ParsedEffect>> g_template_effects_per_tpl;
 std::vector<std::vector<ParamBake>> g_param_bakes_per_tpl;
 std::vector<std::vector<PresetEntry>> g_template_presets_per_tpl;
@@ -234,11 +245,13 @@ static void render_var_picker_button(const char* id, std::string& target_value) 
     }
     if (ImGui::BeginPopup(id)) {
         auto var_item = [&](const char* label, const char* insert_text) {
+            ImGui::PushStyleColor(ImGuiCol_Text, UI::COL_TEXT_SECONDARY);
             if (ImGui::Selectable(label)) {
                 target_value = insert_text;
             }
+            ImGui::PopStyleColor();
         };
-        ImGui::TextDisabled("note.*");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, "note.*");
         var_item("note.pitch",        "$note.pitch$");
         var_item("note.velocity",     "$note.velocity$");
         var_item("note.index",        "$note.index$");
@@ -252,35 +265,35 @@ static void render_var_picker_button(const char* id, std::string& target_value) 
         var_item("note.pitch_max",    "$note.pitch_max$");
         var_item("note.bpm",          "$note.bpm$");
         ImGui::Separator();
-        ImGui::TextDisabled("item.*");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, "item.*");
         var_item("item.position", "$item.position$");
         var_item("item.length",   "$item.length$");
         var_item("item.playrate", "$item.playrate$");
         var_item("item.loop",     "$item.loop$");
         var_item("item.soffs",    "$item.soffs$");
         ImGui::Separator();
-        ImGui::TextDisabled("midi.*");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, "midi.*");
         var_item("midi.volume",     "$midi.volume$");
         var_item("midi.pan",        "$midi.pan$");
         var_item("midi.pitch_bend", "$midi.pitch_bend$");
         ImGui::Separator();
-        ImGui::TextDisabled("track.*");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, "track.*");
         var_item("track.number", "$track.number$");
         ImGui::Separator();
-        ImGui::TextDisabled("global.*");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, "global.*");
         var_item("global.fps",        "$global.fps$");
         var_item("global.width",      "$global.width$");
         var_item("global.height",     "$global.height$");
         var_item("global.item_count", "$global.item_count$");
         ImGui::Separator();
-        ImGui::TextDisabled("chord.*");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, "chord.*");
         var_item("chord.index", "$chord.index$");
         var_item("chord.count", "$chord.count$");
         ImGui::Separator();
-        ImGui::TextDisabled(u8"文本");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, u8"文本");
         var_item("note.lyric", "$note.lyric$");
         ImGui::Separator();
-        ImGui::TextDisabled(u8"函数");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, u8"函数");
         var_item("rand(0, 127)",       "rand(0, 127)");
         var_item("rand_int(0, 4)",     "rand_int(0, 4)");
         var_item("map_pitch(0, 100)",  "map_pitch(0, 100)");
@@ -461,9 +474,9 @@ void render_effect_chain_panel() {
     // ---- 全部展开 / 全部收起 + 已勾选计数（同一行） ----
     static bool pending_expand_all = false;
     static bool pending_collapse_all = false;
-    if (ImGui::SmallButton(u8"全部展开")) pending_expand_all = true;
+    if (GhostSmallButton(u8"全部展开")) pending_expand_all = true;
     ImGui::SameLine();
-    if (ImGui::SmallButton(u8"全部收起")) pending_collapse_all = true;
+    if (GhostSmallButton(u8"全部收起")) pending_collapse_all = true;
     int total = count_total_active_bakes();
     if (total > 0) {
         ImGui::SameLine();
@@ -509,11 +522,32 @@ void render_effect_chain_panel() {
             auto& preset = g_presets[item.preset_index];
             ImGui::PushID(("preset_row" + std::to_string(item.preset_index)).c_str());
 
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.25f, 0.45f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.30f, 0.50f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.20f, 0.40f, 1.0f));
-            ImGui::Button("::", ImVec2(24, 0));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_BG_ELEVATED);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_BG_SURFACE_ACTIVE);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+            ImGui::Button(("##grip" + std::to_string(item.preset_index)).c_str(), ImVec2(28, 0));
+            ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
+
+            ImVec2 rmin = ImGui::GetItemRectMin();
+            ImVec2 rmax = ImGui::GetItemRectMax();
+            ImVec2 c((rmin.x + rmax.x) * 0.5f, (rmin.y + rmax.y) * 0.5f);
+            ImU32 dcol = ImGui::GetColorU32(ImGui::IsItemHovered() ? UI::COL_TEXT_PRIMARY : UI::COL_TEXT_SECONDARY);
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            float aw = 4.0f, ah = 3.0f;
+            // Up arrow
+            dl->AddTriangleFilled(
+                ImVec2(c.x, c.y - ah - 1),
+                ImVec2(c.x - aw, c.y - 1),
+                ImVec2(c.x + aw, c.y - 1),
+                dcol);
+            // Down arrow
+            dl->AddTriangleFilled(
+                ImVec2(c.x, c.y + ah + 1),
+                ImVec2(c.x - aw, c.y + 1),
+                ImVec2(c.x + aw, c.y + 1),
+                dcol);
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                 int payload = item.preset_index;
                 ImGui::SetDragDropPayload("PRESET_REORDER", &payload, sizeof(int));
@@ -523,9 +557,9 @@ void render_effect_chain_panel() {
             ImGui::SameLine();
 
             std::string label = preset.display_name + "##preset" + std::to_string(item.preset_index);
-            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.28f, 0.28f, 0.42f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.33f, 0.33f, 0.48f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.25f, 0.25f, 0.38f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Header, UI::COL_BG_ELEVATED);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, UI::COL_BG_SURFACE_HOVER);
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, UI::COL_BG_SURFACE_ACTIVE);
             if (ImGui::Selectable(label.c_str(), false,
                     ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
                 if (!preset.highlight_target.empty()) {
@@ -717,7 +751,7 @@ void render_effect_chain_panel() {
             float x2 = win_pos.x + ImGui::GetWindowContentRegionMax().x;
             ImGui::GetWindowDrawList()->AddLine(
                 ImVec2(x1, line_y), ImVec2(x2, line_y),
-                IM_COL32(100, 200, 255, 255), 2.0f);
+                UI::COL_DRAG_INSERT, 2.0f);
         }
 
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PRESET_REORDER")) {

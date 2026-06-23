@@ -1,11 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
 project(AutoZWJ VERSION 0.2.1 LANGUAGES CXX)
 
+# 默认 Release 构建，防止忘记传 -DCMAKE_BUILD_TYPE=Release
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MINGW)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++ -w")
+    # 全量静态链接 MinGW 运行时（libgcc, libstdc++, libwinpthread），消除外部 DLL 依赖
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static -w")
 endif()
 
 set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/src/thirdparty/imgui)
