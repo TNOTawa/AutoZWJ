@@ -27,9 +27,13 @@ cmake --build build
 ```
 src/
 ├── plugin.h/cpp                    # 插件入口、回调注册、生成引擎、层分配、变量绑定
-├── rpp/rpp_parser.h/cpp            # REAPER .rpp 解析器
-├── midi/midi_parser.h/cpp          # SMF .mid 解析器
-├── lrc/lrc_parser.h/cpp            # LRC 歌词解析器
+├── parsers/
+│   ├── rpp/rpp_parser.h/cpp        # REAPER .rpp 解析器
+│   ├── midi/midi_parser.h/cpp      # SMF .mid 解析器
+│   └── lrc/lrc_parser.h/cpp        # LRC 歌词解析器
+├── codec/codec.h/cpp               # 字符编码转换（utf8/wide/cp932）
+├── chain/template_chain.h/cpp      # 模板效果链提取与解析
+├── generation/generation.h/cpp     # 物件生成引擎（纯数据黑盒）
 ├── exo/object_generator.h/cpp      # .object alias 生成（旧路径，已停用）
 ├── effect/effect_dict.h/cpp        # ExEdit2 效果参数字典（名称映射）
 ├── script/

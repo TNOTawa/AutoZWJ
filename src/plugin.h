@@ -7,6 +7,7 @@
 
 #include "plugin2.h"
 #include "logger2.h"
+#include "codec/codec.h"
 
 struct ObjDict {
     std::vector<double> pos;
@@ -137,11 +138,6 @@ extern LOG_HANDLE* g_logger;
 extern HINSTANCE g_dll_hinst;
 extern std::vector<TemplateEntry> g_template_pool;
 
-std::wstring utf8_to_wide(const std::string& utf8);
-std::string wide_to_utf8(const std::wstring& wide);
-std::string cp932_to_utf8(const std::string& cp932);
-std::string maybe_cp932_to_utf8(const std::string& s);
-
 bool parse_project_file(const std::wstring& file_path);
 std::wstring get_project_summary();
 void save_config_to_project_file(EDIT_HANDLE* edit, const OutputConfig& cfg);
@@ -152,8 +148,6 @@ void add_file_to_history(const std::wstring& path);
 void remove_file_from_history(int index);
 void update_current_project_offset(double offset);
 void sync_scene_info();
-
-std::string extract_template_chain(const std::string& alias);
 
 void select_all_tracks();
 void deselect_all_tracks();

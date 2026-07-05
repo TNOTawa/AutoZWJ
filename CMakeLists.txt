@@ -18,9 +18,12 @@ set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/src/thirdparty/imgui)
 
 add_library(AutoZWJ SHARED
     src/plugin.cpp
-    src/rpp/rpp_parser.cpp
-    src/midi/midi_parser.cpp
-    src/lrc/lrc_parser.cpp
+    src/codec/codec.cpp
+    src/chain/template_chain.cpp
+    src/generation/generation.cpp
+    src/parsers/rpp/rpp_parser.cpp
+    src/parsers/midi/midi_parser.cpp
+    src/parsers/lrc/lrc_parser.cpp
     src/exo/object_generator.cpp
     src/effect/effect_dict.cpp
     src/ui/file_picker.cpp

@@ -2,9 +2,9 @@
 //      当前出于兼容性考虑暂不替换，新功能继续沿用 rppinexo.* 前缀。
 
 #include "plugin.h"
-#include "rpp/rpp_parser.h"
-#include "midi/midi_parser.h"
-#include "lrc/lrc_parser.h"
+#include "parsers/rpp/rpp_parser.h"
+#include "parsers/midi/midi_parser.h"
+#include "parsers/lrc/lrc_parser.h"
 #include <algorithm>
 
 static bool g_project_state_dirty = false;

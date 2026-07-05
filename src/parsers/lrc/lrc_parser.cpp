@@ -1,4 +1,4 @@
-#include "lrc/lrc_parser.h"
+#include "lrc_parser.h"
 #include <sstream>
 #include <algorithm>
 #include <cstdlib>

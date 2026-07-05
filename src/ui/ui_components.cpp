@@ -24,25 +24,6 @@ void save_last_directory(const std::wstring& dir) {
 // ---------------------------------------------------------------------------
 // REAPER.ini 最近文件（直接读取原始字节，自适应编码）
 // ---------------------------------------------------------------------------
-static bool is_valid_utf8_bytes(const std::string& s) {
-    size_t i = 0;
-    while (i < s.size()) {
-        unsigned char c = s[i];
-        if (c < 0x80) { i++; continue; }
-        size_t n = 0;
-        if ((c & 0xE0) == 0xC0) n = 2;
-        else if ((c & 0xF0) == 0xE0) n = 3;
-        else if ((c & 0xF8) == 0xF0) n = 4;
-        else return false;
-        if (i + n > s.size()) return false;
-        for (size_t j = 1; j < n; j++) {
-            if ((s[i+j] & 0xC0) != 0x80) return false;
-        }
-        i += n;
-    }
-    return true;
-}
-
 static std::vector<std::wstring> get_reaper_recent_files_internal() {
     std::vector<std::wstring> result;
 
@@ -72,7 +53,7 @@ static std::vector<std::wstring> get_reaper_recent_files_internal() {
         }
     } else {
         content = raw;
-        if (!is_valid_utf8_bytes(content)) {
+        if (!is_valid_utf8(content)) {
             content = maybe_cp932_to_utf8(content);
         }
     }
