@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AutoZWJ VERSION 0.2.2 LANGUAGES CXX)
+project(AutoZWJ VERSION 0.2.3 LANGUAGES CXX)
 
 # 默认 Release 构建，防止忘记传 -DCMAKE_BUILD_TYPE=Release
 if(NOT CMAKE_BUILD_TYPE)
@@ -31,6 +31,7 @@ add_library(AutoZWJ SHARED
     src/ui/project_state.cpp
     src/ui/ui_components.cpp
     src/ui/effect_chain_editor.cpp
+    src/tools/tempo/tempo_apply.cpp
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp

@@ -5,10 +5,12 @@
 #include "ui/imgui_window.h"
 #include "ui/effect_chain_editor.h"
 #include "exo/object_generator.h"
+#include "tools/tempo/tempo_apply.h"
 #include <algorithm>
 #include <sstream>
 
 AppPage g_current_page = AppPage::Config;
+static bool g_show_no_project_popup = false;
 
 // ---------------------------------------------------------------------------
 // 目录持久化
@@ -286,6 +288,18 @@ void render_nav_bar() {
         ImGui::EndMenu();
     }
 
+    // 工具菜单
+    if (ImGui::BeginMenu(u8"工具")) {
+        if (ImGui::MenuItem(u8"应用BPM网格到时间轴")) {
+            if (g_project_state.has_data) {
+                apply_bpm_grid();
+            } else {
+                g_show_no_project_popup = true;
+            }
+        }
+        ImGui::EndMenu();
+    }
+
     // 右侧：效果链编辑（粗体、高亮背景）
     float bar_width = ImGui::GetWindowWidth();
     float left_x = ImGui::GetCursorPosX();
@@ -320,6 +334,18 @@ void render_nav_bar() {
     ImGui::PopStyleColor(4);
 
     ImGui::EndMenuBar();
+
+    if (g_show_no_project_popup) {
+        g_show_no_project_popup = false;
+        ImGui::OpenPopup(u8"BPM网格提示");
+    }
+    if (ImGui::BeginPopupModal(u8"BPM网格提示", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text(u8"请先导入工程文件");
+        if (ImGui::Button(u8"确定", ImVec2(80, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -396,6 +422,15 @@ void render_import_page() {
     ImGui::Separator();
     if (ImGui::InputDouble(u8"基准时间（秒）", &g_project_state.config.base_time_sec, 0.1, 1.0, "%.1f")) {
         update_current_project_offset(g_project_state.config.base_time_sec);
+    }
+
+    ImGui::Spacing();
+    if (ImGui::Button(u8"应用BPM网格到时间轴", ImVec2(200, 0))) {
+        if (g_project_state.has_data) {
+            apply_bpm_grid();
+        } else {
+            g_show_no_project_popup = true;
+        }
     }
 
     ImGui::Spacing();

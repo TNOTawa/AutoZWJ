@@ -3,7 +3,7 @@
 > 项目名称：AutoZWJ
 > 类型：`.aux2` 泛用插件
 > 功能：将 REAPER `.rpp` / MIDI `.mid` 工程以现有物件为模板批量导入 AviUtl2 时间轴
-> 状态：核心功能已闭环（Phase 1~7 + 脚本系统完成）
+> 状态：核心功能已闭环（Phase 1~7 + 脚本系统完成 + BPM 网格工具）
 
 ---
 
@@ -15,7 +15,8 @@ src/
 ├── parsers/
 │   ├── rpp/rpp_parser.h/cpp        # REAPER .rpp 解析器
 │   ├── midi/midi_parser.h/cpp      # SMF .mid 解析器
-│   └── lrc/lrc_parser.h/cpp        # LRC 歌词解析器
+│   ├── lrc/lrc_parser.h/cpp        # LRC 歌词解析器
+│   └── tempo_convert.h             # tempo_map → BPM_INFO[] 共享转换（仅头文件）
 ├── codec/codec.h/cpp               # 字符编码转换（utf8/wide/cp932）
 ├── chain/template_chain.h/cpp      # 模板效果链提取与解析
 ├── generation/generation.h/cpp     # 物件生成引擎（纯数据黑盒）
@@ -31,6 +32,8 @@ src/
 │   ├── ui_config.h                 # UI 风格常量（字体、颜色、间距）
 │   ├── ui_components.h/cpp         # 轨道树、导入/配置页面、参数面板
 │   └── effect_chain_editor.h/cpp   # 效果链编辑器面板（参数 bake + 变量映射 + 预设拖拽）
+├── tools/
+│   └── tempo/tempo_apply.h/cpp     # BPM 网格同步工具（增强非必要功能）
 └── thirdparty/imgui/               # Dear ImGui docking 分支
 ```
 
@@ -50,6 +53,7 @@ src/
 | **效果链编辑器** | 三面板抽屉式布局，只读展示模板效果链，勾选参数 bake + 设置目标值 |
 | **脚本变量系统** | `$note.velocity$ / 127 * 200` 表达式驱动 bake 值，`ExprEvaluator` 递归下降求值 |
 | **动态预设** | 翻转等预设可视化并在效果链面板中拖拽调整插入位置 |
+| **BPM 网格工具** | 从 MIDI/RPP 提取 tempo map，经 `tempo_map_to_bpm_info()` 秒域统一转换后写 `set_grid_bpm_list`；按钮主动触发，不持久化 |
 
 ## 模板模式的关键流程
 
@@ -117,6 +121,7 @@ cmake --build build
 - Item 属性：POSITION, LENGTH, LOOP, PLAYRATE, SOFFS
 - 源类型：VIDEO, WAVE, MP3, FLAC, VORBIS, MIDI
 - 空轨：`<TRACK>` 存在但无 `<ITEM>` —— 解析后在树中保留但生成时跳过
+- Tempo：工程头 `TEMPO <bpm> <分子> <分母>` 提供初始 BPM/拍号；`<TEMPOENVEX>` 内 `PT <pos_sec> <bpm> <shape> ...` 行提供变速点（position 单位为秒）
 
 ---
 

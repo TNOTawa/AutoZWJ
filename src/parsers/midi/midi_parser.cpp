@@ -54,6 +54,13 @@ struct MidiTrackData {
     std::vector<MidiEvent> events;
 };
 
+struct RawMidiTempoEvent {
+    uint64_t tick;
+    bool is_timesig;
+    uint32_t tempo;
+    uint8_t numerator;
+};
+
 bool parse_midi(const std::string& path, ObjDict& objdict,
                 std::vector<TrackNode>& tracks, std::vector<std::string>& file_paths) {
     std::wstring wpath = utf8_to_wide(path);
@@ -85,6 +92,7 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
     double usec_per_tick = usec_per_beat / ticks_per_beat;
 
     std::vector<MidiTrackData> midi_tracks;
+    std::vector<RawMidiTempoEvent> raw_tempo_events;
     bool has_any_note = false;
 
     for (int track_idx = 0; track_idx < (int)ntrks; track_idx++) {
@@ -98,6 +106,7 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
 
         std::vector<PendingNote> pending;
         double abs_time_sec = 0.0;
+        uint64_t abs_tick = 0;
         uint8_t running_status = 0;
 
         // per-channel CC 状态，MIDI 标准 power-on 默认: volume=100, pan=64
@@ -115,6 +124,7 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
             if (need_delta) {
                 uint32_t delta = read_varlen(p, track_end);
                 if (p >= track_end) break;
+                abs_tick += delta;
                 abs_time_sec += delta * usec_per_tick / 1000000.0;
             }
             need_delta = true;
@@ -143,9 +153,18 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
                 const uint8_t* meta_data = p;
                 p += meta_len;
                 if (meta_type == 0x51 && meta_len == 3 && meta_data + 3 <= track_end) {
-                    usec_per_beat = (double)(((uint32_t)meta_data[0] << 16) |
-                                             ((uint32_t)meta_data[1] << 8) | meta_data[2]);
-                    usec_per_tick = usec_per_beat / ticks_per_beat;
+                    uint32_t new_tempo = ((uint32_t)meta_data[0] << 16) |
+                                         ((uint32_t)meta_data[1] << 8) | meta_data[2];
+                    if (new_tempo > 0) {
+                        usec_per_beat = (double)new_tempo;
+                        usec_per_tick = usec_per_beat / ticks_per_beat;
+                        raw_tempo_events.push_back({abs_tick, false, new_tempo, 0});
+                    }
+                } else if (meta_type == 0x58 && meta_len >= 1 && meta_data < track_end) {
+                    uint8_t numerator = meta_data[0];
+                    if (numerator > 0) {
+                        raw_tempo_events.push_back({abs_tick, true, 0, numerator});
+                    }
                 } else if (meta_type == 0x03 && meta_len > 0) {
                     std::string name((const char*)meta_data, meta_len);
                     trk.track_name = name;
@@ -259,6 +278,40 @@ bool parse_midi(const std::string& path, ObjDict& objdict,
 
     objdict.bpm = 60000000.0 / usec_per_beat;
     objdict.track_count = (int)midi_tracks.size();
+
+    // 构建 tempo_map：按 tick 排序（拍号优先于同 tick 的 tempo），tick→秒换算
+    std::sort(raw_tempo_events.begin(), raw_tempo_events.end(),
+        [](const RawMidiTempoEvent& a, const RawMidiTempoEvent& b) {
+            if (a.tick != b.tick) return a.tick < b.tick;
+            return a.is_timesig > b.is_timesig;
+        });
+
+    {
+        uint64_t cur_tick = 0;
+        double cur_time = 0.0;
+        uint32_t cur_tempo = 500000;
+        int cur_beat = 4;
+
+        objdict.tempo_map.push_back({0.0, 60000000.0 / cur_tempo, cur_beat});
+
+        for (const auto& ev : raw_tempo_events) {
+            cur_time += (double)(ev.tick - cur_tick) * cur_tempo / 1000000.0 / ticks_per_beat;
+            cur_tick = ev.tick;
+
+            if (ev.is_timesig) {
+                cur_beat = ev.numerator;
+            } else {
+                cur_tempo = ev.tempo;
+            }
+
+            double bpm = 60000000.0 / cur_tempo;
+            if (!objdict.tempo_map.empty() && objdict.tempo_map.back().time_sec == cur_time) {
+                objdict.tempo_map.back() = {cur_time, bpm, cur_beat};
+            } else {
+                objdict.tempo_map.push_back({cur_time, bpm, cur_beat});
+            }
+        }
+    }
 
     for (size_t ti = 0; ti < midi_tracks.size(); ti++) {
         auto& trk = midi_tracks[ti];

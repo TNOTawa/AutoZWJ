@@ -131,8 +131,34 @@ bool parse_rpp(const std::string& path, ObjDict& objdict,
     int num_lines = (int)lines.size();
     int current_depth = 0;
 
+    double header_bpm = 120.0;
+    int header_beat = 4;
+    std::vector<TempoPoint> rpp_pt_events;
+
     while (index < num_lines) {
         auto parts = split_line(lines[index]);
+
+        if (!parts.empty() && parts[0] == "TEMPO" && parts.size() >= 3) {
+            header_bpm = std::atof(parts[1].c_str());
+            header_beat = std::atoi(parts[2].c_str());
+            if (header_beat <= 0) header_beat = 4;
+        }
+
+        if (!parts.empty() && parts[0] == "<TEMPOENVEX") {
+            index++;
+            while (index < num_lines) {
+                auto tparts = split_line(lines[index]);
+                if (tparts.empty() || tparts[0] == ">") break;
+                if (tparts[0] == "PT" && tparts.size() >= 3) {
+                    double pt_pos = std::atof(tparts[1].c_str());
+                    double pt_bpm = std::atof(tparts[2].c_str());
+                    if (pt_bpm > 0.0) {
+                        rpp_pt_events.push_back({pt_pos, pt_bpm, header_beat});
+                    }
+                }
+                index++;
+            }
+        }
 
         if (!parts.empty() && parts[0] == "<TRACK") {
             if (index + 1 < num_lines) {
@@ -382,6 +408,22 @@ bool parse_rpp(const std::string& path, ObjDict& objdict,
     }
 
     objdict.track_count = track_index;
+
+    // 构建 tempo_map：工程头 TEMPO 提供初始 BPM/拍号，TEMPOENVEX 内 PT 行提供变速点
+    {
+        std::sort(rpp_pt_events.begin(), rpp_pt_events.end(),
+            [](const TempoPoint& a, const TempoPoint& b) { return a.time_sec < b.time_sec; });
+
+        objdict.tempo_map.push_back({0.0, header_bpm, header_beat});
+        for (const auto& pt : rpp_pt_events) {
+            if (!objdict.tempo_map.empty() && objdict.tempo_map.back().time_sec == pt.time_sec) {
+                objdict.tempo_map.back() = pt;
+            } else {
+                objdict.tempo_map.push_back(pt);
+            }
+        }
+        objdict.bpm = objdict.tempo_map[0].bpm;
+    }
 
     if (!tracks.empty()) {
         int current_track = 0;

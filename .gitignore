@@ -1,7 +1,7 @@
 ﻿# SDK and references (read-only)
 references/
 aviutl2_sdk/
-tools/
+/tools/
 src/thirdparty/
 
 # Internal state

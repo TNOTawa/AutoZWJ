@@ -9,6 +9,12 @@
 #include "logger2.h"
 #include "codec/codec.h"
 
+struct TempoPoint {
+    double time_sec = 0.0;
+    double bpm = 120.0;
+    int beat = 4;
+};
+
 struct ObjDict {
     std::vector<double> pos;
     std::vector<double> length;
@@ -26,6 +32,7 @@ struct ObjDict {
     std::vector<double> midi_pan;        // CC10, 0-127 (64=center), -1 = 未设置
     std::vector<double> midi_pitch_bend; // -8192~8191, 0 = 中心
     double bpm = 120.0;
+    std::vector<TempoPoint> tempo_map;
     int track_count = 0;
 };
 
