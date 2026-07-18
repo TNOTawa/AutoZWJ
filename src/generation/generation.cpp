@@ -1,4 +1,5 @@
 #include "generation/generation.h"
+#include "i18n/i18n.h"
 #include "exo/object_generator.h"
 #include "script/expr_evaluator.h"
 #include "script/variable_subst.h"
@@ -7,6 +8,7 @@
 #include <sstream>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <map>
 #include <unordered_map>
 
@@ -739,9 +741,9 @@ std::vector<GeneratedObject> generate_object_specs(const GenInput& in) {
                             size_t sep = obj_name.find_last_of(L'\\');
                             if (sep != std::wstring::npos) obj_name = obj_name.substr(sep + 1);
                         } else if (is_gap_only) {
-                            obj_name = L"Gap " + std::to_wstring(item_count_global);
+                            obj_name = utf8_to_wide(tr_str(u8"Gap")) + L" " + std::to_wstring(item_count_global);
                         } else {
-                            obj_name = L"Item " + std::to_wstring(item_count_global);
+                            obj_name = utf8_to_wide(tr_str(u8"Item")) + L" " + std::to_wstring(item_count_global);
                         }
 
                         specs.push_back({use_layer, iv.sf, iv.ef, alias.str(), obj_name});

@@ -1,4 +1,5 @@
 #include "plugin.h"
+#include "i18n/i18n.h"
 #include "parsers/rpp/rpp_parser.h"
 #include "parsers/midi/midi_parser.h"
 #include "exo/object_generator.h"
@@ -10,10 +11,12 @@
 #include "script/variable_subst.h"
 #include "chain/template_chain.h"
 #include "generation/generation.h"
+#include "codec/codec.h"
 #include <algorithm>
 #include <sstream>
 #include <cmath>
 #include <cstdint>
+#include <format>
 
 ProjectState g_project_state;
 SceneInfo g_scene_info;
@@ -59,6 +62,7 @@ EXTERN_C __declspec(dllexport) void InitializeLogger(LOG_HANDLE* handle) {
 }
 
 EXTERN_C __declspec(dllexport) bool InitializePlugin(DWORD version) {
+    i18n_init();
     return true;
 }
 
@@ -86,13 +90,43 @@ struct GenCallState {
     uint32_t seed_base;
 };
 
+static void gen_edit_callback(void* param, EDIT_SECTION* edit) {
+    auto* cs = static_cast<GenCallState*>(param);
+    update_scene_from_edit(edit);
+
+    GenInput in;
+    in.objdict = &g_project_state.objdict;
+    in.tracks = &g_project_state.tracks;
+    in.config = &g_project_state.config;
+    in.template_pool = g_template_pool;
+    in.bakes_per_tpl = &g_param_bakes_per_tpl;
+    in.presets_per_tpl = &g_template_presets_per_tpl;
+    in.scene = g_scene_info;
+    in.base_layer = g_project_state.template_layer + 1;
+    in.seed_base = cs->seed_base;
+    in.shuffled_order = std::move(cs->shuffled_order);
+    in.logger = g_logger;
+
+    auto specs = generate_object_specs(in);
+
+    for (auto& s : specs) {
+        auto obj = edit->create_object_from_alias(s.alias_chain.c_str(), s.layer, s.sf, s.ef - s.sf);
+        if (obj) edit->set_object_name(obj, s.name.c_str());
+    }
+
+    if (g_logger)
+        g_logger->log(g_logger, utf8_to_wide(tr_fmt(u8"已生成 {} 个物件", specs.size())).c_str());
+
+    delete cs;
+}
+
 static void on_generate_from_imgui() {
     if (!g_project_state.has_data) {
-        if (g_logger) g_logger->warn(g_logger, L"AutoZWJ: 未加载音频工程");
+        if (g_logger) g_logger->warn(g_logger, utf8_to_wide(tr_str(u8"未加载音频工程")).c_str());
         return;
     }
     if (g_template_pool.empty()) {
-        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 未设置模板，请右键已选物件 → 配置导入... 重新打开");
+        if (g_logger) g_logger->error(g_logger, utf8_to_wide(tr_str(u8"未设置模板，请右键已选物件 → 配置导入... 重新打开")).c_str());
         return;
     }
 
@@ -111,35 +145,7 @@ static void on_generate_from_imgui() {
     }
 
     auto* cs = new GenCallState{std::move(shuffled_order), seed_base};
-    g_edit_handle->call_edit_section_param(cs, [](void* param, EDIT_SECTION* edit) {
-        auto* cs = static_cast<GenCallState*>(param);
-        update_scene_from_edit(edit);
-
-        GenInput in;
-        in.objdict = &g_project_state.objdict;
-        in.tracks = &g_project_state.tracks;
-        in.config = &g_project_state.config;
-        in.template_pool = g_template_pool;
-        in.bakes_per_tpl = &g_param_bakes_per_tpl;
-        in.presets_per_tpl = &g_template_presets_per_tpl;
-        in.scene = g_scene_info;
-        in.base_layer = g_project_state.template_layer + 1;
-        in.seed_base = cs->seed_base;
-        in.shuffled_order = std::move(cs->shuffled_order);
-        in.logger = g_logger;
-
-        auto specs = generate_object_specs(in);
-
-        for (auto& s : specs) {
-            auto obj = edit->create_object_from_alias(s.alias_chain.c_str(), s.layer, s.sf, s.ef - s.sf);
-            if (obj) edit->set_object_name(obj, s.name.c_str());
-        }
-
-        if (g_logger)
-            g_logger->log(g_logger, (L"AutoZWJ: 已生成 " + std::to_wstring(specs.size()) + L" 个物件").c_str());
-
-        delete cs;
-    });
+    g_edit_handle->call_edit_section_param(cs, gen_edit_callback);
 }
 
 static void on_select_project(EDIT_SECTION* edit) {
@@ -169,7 +175,7 @@ static void on_open_config(EDIT_SECTION* edit) {
 
     int sel_num = edit->get_selected_object_num();
     if (sel_num <= 0) {
-        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 请先在时间轴上选择一个物件作为模板，再右键打开配置");
+        if (g_logger) g_logger->error(g_logger, utf8_to_wide(tr_str(u8"请先在时间轴上选择一个物件作为模板，再右键打开配置")).c_str());
         return;
     }
 
@@ -196,7 +202,7 @@ static void on_open_config(EDIT_SECTION* edit) {
         if (name_ptr && name_ptr[0]) {
             entry.display_name = wide_to_utf8(name_ptr);
         } else {
-            entry.display_name = u8"模板" + std::to_string(i + 1);
+            entry.display_name = tr_str(u8"模板") + std::to_string(i + 1);
         }
 
         g_template_pool.push_back(entry);
@@ -204,7 +210,7 @@ static void on_open_config(EDIT_SECTION* edit) {
     }
 
     if (g_template_pool.empty()) {
-        if (g_logger) g_logger->error(g_logger, L"AutoZWJ: 无法读取任何选中物件的数据");
+        if (g_logger) g_logger->error(g_logger, utf8_to_wide(tr_str(u8"无法读取任何选中物件的数据")).c_str());
         return;
     }
 
@@ -270,8 +276,10 @@ void sync_scene_info() {
 EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     g_dll_hinst = GetModuleHandle(nullptr);
 
-    host->register_layer_menu(L"[AutoZWJ] 选择音频工程...", on_select_project);
-    host->register_object_menu(L"[AutoZWJ] 配置导入...", on_open_config);
+    static std::wstring s_menu_select = utf8_to_wide(tr_str(u8"选择音频工程..."));
+    static std::wstring s_menu_config = utf8_to_wide(tr_str(u8"配置导入..."));
+    host->register_layer_menu(s_menu_select.c_str(), on_select_project);
+    host->register_object_menu(s_menu_config.c_str(), on_open_config);
     host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI Input", L"*.rpp;*.mid", on_file_drop);
 
     g_edit_handle = host->create_edit_handle();

@@ -1,4 +1,5 @@
 #include "effect_chain_editor.h"
+#include "i18n/i18n.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "ui/ui_config.h"
@@ -66,9 +67,9 @@ static int detect_mode_from_text(const std::string& s) {
 
 static const char* get_mode_label(int mode) {
     switch (mode) {
-        case 0: return u8"[固]";
-        case 1: return u8"[变]";
-        case 2: return u8"[表]";
+        case 0: return tr(u8"[固]");
+        case 1: return tr(u8"[变]");
+        case 2: return tr(u8"[表]");
         default: return "";
     }
 }
@@ -136,11 +137,11 @@ void sync_presets_from_config() {
     if (cfg.alt_flip && cfg.flip_type != FLIP_NONE) {
         PresetEntry preset;
         switch (cfg.flip_type) {
-            case FLIP_HORIZONTAL: preset.display_name = u8"左右翻转"; break;
-            case FLIP_VERTICAL:   preset.display_name = u8"上下翻转"; break;
-            case FLIP_CW:         preset.display_name = u8"顺时针旋转"; break;
-            case FLIP_CCW:        preset.display_name = u8"逆时针旋转"; break;
-            default:              preset.display_name = u8"翻转"; break;
+            case FLIP_HORIZONTAL: preset.display_name = tr_str(u8"左右翻转"); break;
+            case FLIP_VERTICAL:   preset.display_name = tr_str(u8"上下翻转"); break;
+            case FLIP_CW:         preset.display_name = tr_str(u8"顺时针旋转"); break;
+            case FLIP_CCW:        preset.display_name = tr_str(u8"逆时针旋转"); break;
+            default:              preset.display_name = tr_str(u8"翻转"); break;
         }
         preset.effect_block = "";
         preset.highlight_target = "flip_config";
@@ -291,10 +292,10 @@ static void render_var_picker_button(const char* id, std::string& target_value) 
         var_item("chord.index", "$chord.index$");
         var_item("chord.count", "$chord.count$");
         ImGui::Separator();
-        ImGui::TextColored(UI::COL_TEXT_PRIMARY, u8"文本");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, "%s", tr(u8"文本"));
         var_item("note.lyric", "$note.lyric$");
         ImGui::Separator();
-        ImGui::TextColored(UI::COL_TEXT_PRIMARY, u8"函数");
+        ImGui::TextColored(UI::COL_TEXT_PRIMARY, "%s", tr(u8"函数"));
         var_item("rand(0, 127)",       "rand(0, 127)");
         var_item("rand_int(0, 4)",     "rand_int(0, 4)");
         var_item("map_pitch(0, 100)",  "map_pitch(0, 100)");
@@ -423,7 +424,7 @@ void render_effect_chain_panel() {
     if (g_highlight_timer > 0) g_highlight_timer--;
 
     if (g_template_aliases.empty()) {
-        ImGui::TextDisabled(u8"未选择模板物件");
+        ImGui::TextDisabled("%s", tr(u8"未选择模板物件"));
         return;
     }
 
@@ -443,7 +444,7 @@ void render_effect_chain_panel() {
     if (g_template_aliases.size() > 1) {
         if (ImGui::BeginTabBar("Templates")) {
             for (int i = 0; i < (int)g_template_aliases.size(); i++) {
-                std::string label = u8"模板" + std::to_string(i + 1);
+                std::string label = tr_str(u8"模板") + std::to_string(i + 1);
                 if (i < (int)g_template_pool.size() && !g_template_pool[i].display_name.empty()) {
                     label = g_template_pool[i].display_name;
                     if (label.size() > 16) label = label.substr(0, 13) + "...";
@@ -475,13 +476,13 @@ void render_effect_chain_panel() {
     // ---- 全部展开 / 全部收起 + 已勾选计数（同一行） ----
     static bool pending_expand_all = false;
     static bool pending_collapse_all = false;
-    if (GhostSmallButton(u8"全部展开")) pending_expand_all = true;
+    if (GhostSmallButton(tr(u8"全部展开"))) pending_expand_all = true;
     ImGui::SameLine();
-    if (GhostSmallButton(u8"全部收起")) pending_collapse_all = true;
+    if (GhostSmallButton(tr(u8"全部收起"))) pending_collapse_all = true;
     int total = count_total_active_bakes();
     if (total > 0) {
         ImGui::SameLine();
-        ImGui::TextDisabled(u8"已勾选 %d 个参数", total);
+        ImGui::TextDisabled(tr(u8"已勾选 %d 个参数"), total);
     }
     ImGui::Spacing();
 

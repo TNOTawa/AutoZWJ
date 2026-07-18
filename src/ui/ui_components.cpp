@@ -1,4 +1,5 @@
 #include "ui_components.h"
+#include "i18n/i18n.h"
 #include "ui/ui_config.h"
 #include "effect/effect_dict.h"
 #include "ui/file_picker.h"
@@ -230,7 +231,7 @@ static void render_flat_track_node(size_t idx, bool read_only) {
         name_utf8 = "Track " + std::to_string(node.number);
     }
     if (is_empty) {
-        name_utf8 += u8" (空)";
+        name_utf8 += tr(u8" (空)");
         ImGui::PushStyleColor(ImGuiCol_Text, UI::COL_TRACK_EMPTY);
     }
     ImGui::TextUnformatted(name_utf8.c_str());
@@ -243,21 +244,21 @@ static void render_flat_track_node(size_t idx, bool read_only) {
 
 void render_track_tree(bool read_only) {
     if (!g_project_state.has_data) {
-        ImGui::TextDisabled(u8"未加载音频工程");
+        ImGui::TextDisabled("%s", tr(u8"未加载音频工程"));
         return;
     }
 
-    ImGui::Text(u8"轨道选择");
+    ImGui::Text("%s", tr(u8"轨道选择"));
     ImGui::SameLine();
 
     if (!read_only) {
-        if (GhostSmallButton(u8"全选")) select_all_tracks();
+        if (GhostSmallButton(tr(u8"全选"))) select_all_tracks();
         ImGui::SameLine();
-        if (GhostSmallButton(u8"取消")) deselect_all_tracks();
+        if (GhostSmallButton(tr(u8"取消"))) deselect_all_tracks();
         ImGui::SameLine();
-        if (GhostSmallButton(u8"反选")) invert_track_selection();
+        if (GhostSmallButton(tr(u8"反选"))) invert_track_selection();
     } else {
-        ImGui::TextDisabled(u8"(只读预览)");
+        ImGui::TextDisabled("%s", tr(u8"(只读预览)"));
     }
 
     ImGui::Separator();
@@ -274,23 +275,23 @@ void render_nav_bar() {
     if (!ImGui::BeginMenuBar()) return;
 
     // 左侧：文件
-    if (ImGui::BeginMenu(u8"文件")) {
-        if (ImGui::MenuItem(u8"工程导入页面")) {
+    if (ImGui::BeginMenu(tr(u8"文件"))) {
+        if (ImGui::MenuItem(tr(u8"工程导入页面"))) {
             g_current_page = AppPage::Import;
         }
-        if (ImGui::MenuItem(u8"配置导入页面")) {
+        if (ImGui::MenuItem(tr(u8"配置导入页面"))) {
             g_current_page = AppPage::Config;
         }
         ImGui::Separator();
-        if (ImGui::MenuItem(u8"首选项...")) {
-            // 预留
+        if (ImGui::MenuItem(tr(u8"首选项..."))) {
+            ImGui::OpenPopup(u8"##preferences");
         }
         ImGui::EndMenu();
     }
 
     // 工具菜单
-    if (ImGui::BeginMenu(u8"工具")) {
-        if (ImGui::MenuItem(u8"应用BPM网格到时间轴")) {
+    if (ImGui::BeginMenu(tr(u8"工具"))) {
+        if (ImGui::MenuItem(tr(u8"应用BPM网格到时间轴"))) {
             if (g_project_state.has_data) {
                 apply_bpm_grid();
             } else {
@@ -324,7 +325,7 @@ void render_nav_bar() {
         ImGui::PushFont(g_font_bold);
     }
 
-    if (ImGui::Button(u8"效果链编辑", ImVec2(UI::EFFECT_CHAIN_BUTTON_WIDTH, 0))) {
+    if (ImGui::Button(tr(u8"效果链编辑"), ImVec2(UI::EFFECT_CHAIN_BUTTON_WIDTH, 0))) {
         g_show_effect_editor = !g_show_effect_editor;
     }
 
@@ -337,11 +338,11 @@ void render_nav_bar() {
 
     if (g_show_no_project_popup) {
         g_show_no_project_popup = false;
-        ImGui::OpenPopup(u8"BPM网格提示");
+        ImGui::OpenPopup(tr(u8"BPM网格提示"));
     }
-    if (ImGui::BeginPopupModal(u8"BPM网格提示", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text(u8"请先导入工程文件");
-        if (ImGui::Button(u8"确定", ImVec2(80, 0))) {
+    if (ImGui::BeginPopupModal(tr(u8"BPM网格提示"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("%s", tr(u8"请先导入工程文件"));
+        if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -352,7 +353,7 @@ void render_nav_bar() {
 // 工程导入独立页面
 // ---------------------------------------------------------------------------
 void render_import_page() {
-    ImGui::Text(u8"工程导入");
+    ImGui::Text("%s", tr(u8"工程导入"));
     ImGui::Separator();
 
     // --- REAPER 最近文件下拉框 ---
@@ -368,13 +369,13 @@ void render_import_page() {
         }
     }
 
-    if (GhostButton(u8"刷新")) {
+    if (GhostButton(tr(u8"刷新"))) {
         recent_files = get_reaper_recent_files_internal();
         selected_recent_idx = -1;
     }
     ImGui::SameLine();
 
-    std::string combo_preview = u8"选择 REAPER 最近文件...";
+    std::string combo_preview = tr_str(u8"选择 REAPER 最近文件...");
     if (selected_recent_idx >= 0 && selected_recent_idx < (int)recent_files.size()) {
         std::string name = wide_to_utf8(recent_files[selected_recent_idx]);
         size_t sep = name.find_last_of("\\/");
@@ -403,7 +404,7 @@ void render_import_page() {
     }
 
     ImGui::SameLine();
-    if (GhostButton(u8"浏览...")) {
+    if (GhostButton(tr(u8"浏览..."))) {
         std::wstring init_dir = load_last_directory();
         show_file_picker(GetActiveWindow(), [](const std::wstring& path) {
             if (parse_project_file(path)) {
@@ -418,14 +419,14 @@ void render_import_page() {
     ImGui::Spacing();
     ImGui::Separator();
 
-    ImGui::Text(u8"导入选项");
+    ImGui::Text("%s", tr(u8"导入选项"));
     ImGui::Separator();
-    if (ImGui::InputDouble(u8"基准时间（秒）", &g_project_state.config.base_time_sec, 0.1, 1.0, "%.1f")) {
+    if (ImGui::InputDouble(tr(u8"基准时间（秒）"), &g_project_state.config.base_time_sec, 0.1, 1.0, "%.1f")) {
         update_current_project_offset(g_project_state.config.base_time_sec);
     }
 
     ImGui::Spacing();
-    if (ImGui::Button(u8"应用BPM网格到时间轴", ImVec2(200, 0))) {
+    if (ImGui::Button(tr(u8"应用BPM网格到时间轴"), ImVec2(200, 0))) {
         if (g_project_state.has_data) {
             apply_bpm_grid();
         } else {
@@ -445,7 +446,7 @@ void render_import_page() {
     ImGui::EndChild();
 
     // --- 底部固定确认导入按钮 ---
-    if (ImGui::Button(u8"确认导入", ImVec2(140, 35))) {
+    if (ImGui::Button(tr(u8"确认导入"), ImVec2(140, 35))) {
         if (g_project_state.has_data) {
             if (!g_project_state.template_alias.empty()) {
                 if (g_template_aliases.empty()) {
@@ -454,20 +455,20 @@ void render_import_page() {
                 }
                 g_current_page = AppPage::Config;
             } else {
-                ImGui::OpenPopup(u8"提示");
+                ImGui::OpenPopup(tr(u8"提示"));
             }
         } else {
-            ImGui::OpenPopup(u8"提示");
+            ImGui::OpenPopup(tr(u8"提示"));
         }
     }
 
-    if (ImGui::BeginPopupModal(u8"提示", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal(tr(u8"提示"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (!g_project_state.has_data) {
-            ImGui::Text(u8"请先选择一个工程文件");
+            ImGui::Text("%s", tr(u8"请先选择一个工程文件"));
         } else {
-            ImGui::Text(u8"工程已导入，但尚未选择模板物件。\n请右键时间轴物件选择配置导入");
+            ImGui::Text("%s", tr(u8"工程已导入，但尚未选择模板物件。\n请右键时间轴物件选择配置导入"));
         }
-        if (ImGui::Button(u8"确定", ImVec2(80, 0))) {
+        if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -489,17 +490,17 @@ static void render_header_panel() {
             stats = summary_utf8.substr(sep + 3);
         }
     } else {
-        preview = u8"未加载音频工程";
+        preview = tr_str(u8"未加载音频工程");
     }
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.45f);
     if (ImGui::BeginCombo("##ProjectCombo", preview.c_str())) {
-        if (ImGui::Selectable(u8"导入新工程...")) {
+        if (ImGui::Selectable(tr(u8"导入新工程..."))) {
             g_current_page = AppPage::Import;
         }
         if (!g_project_state.file_history.empty()) {
             ImGui::Separator();
-            ImGui::TextDisabled(u8"历史记录");
+            ImGui::TextDisabled("%s", tr(u8"历史记录"));
         }
         for (int i = 0; i < (int)g_project_state.file_history.size(); i++) {
             const std::wstring& path = g_project_state.file_history[i].path;
@@ -513,11 +514,31 @@ static void render_header_panel() {
                 parse_project_file(path);
             }
             if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem(u8"删除记录")) {
+                if (ImGui::MenuItem(tr(u8"删除记录"))) {
                     remove_file_from_history(i);
                 }
-                ImGui::EndPopup();
-            }
+        ImGui::EndPopup();
+    }
+
+    if (ImGui::BeginPopupModal("##preferences", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("%s", tr(u8"首选项"));
+        ImGui::Separator();
+        ImGui::Text("%s", tr(u8"语言"));
+        ImGui::SameLine();
+        const char* lang_names[] = { u8"简体中文", "English", u8"日本語" };
+        int lang_idx = get_language_index();
+        ImGui::SetNextItemWidth(150);
+        if (ImGui::Combo("##lang_combo", &lang_idx, lang_names, 3)) {
+            set_language(static_cast<Lang>(lang_idx));
+        }
+        ImGui::Spacing();
+        ImGui::TextDisabled("%s", tr(u8"宿主菜单需重启 AviUtl2 生效"));
+        ImGui::Spacing();
+        if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
             if (is_selected) {
                 ImGui::SetItemDefaultFocus();
             }
@@ -531,11 +552,11 @@ static void render_header_panel() {
         ImGui::TextDisabled("| %s", stats.c_str());
     } else if (!g_project_state.has_data && !g_project_state.file_history.empty()) {
         ImGui::SameLine();
-        ImGui::TextDisabled(u8"(从下拉框选择历史工程，或导入新工程)");
+        ImGui::TextDisabled("%s", tr(u8"(从下拉框选择历史工程，或导入新工程)"));
     } else if (!g_project_state.has_data) {
         ImGui::SameLine();
         ImGui::TextColored(UI::COL_HINT_TEXT,
-            u8"（文件 \u2192 工程导入页面）");
+            tr(u8"（文件 \u2192 工程导入页面）"));
     }
 }
 
@@ -607,7 +628,7 @@ void render_config_panel() {
     OutputConfig& cfg = g_project_state.config;
     SceneInfo& info = g_scene_info;
 
-    ImGui::Text(u8"场景信息");
+    ImGui::Text("%s", tr(u8"场景信息"));
     ImGui::Separator();
     ImGui::Text("%d x %d @ %d/%d fps  |  %d Hz",
         info.width, info.height, info.rate, info.scale, info.sample_rate);
@@ -618,7 +639,7 @@ void render_config_panel() {
     }
 
     ImGui::Spacing();
-    ImGui::Text(u8"参数设置");
+    ImGui::Text("%s", tr(u8"参数设置"));
     ImGui::Separator();
 
     bool flip_highlight = (g_highlight_param_id == "flip_config" && g_highlight_timer > 0);
@@ -630,14 +651,14 @@ void render_config_panel() {
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, UI::COL_FLIP_HEADER_HOVER);
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, UI::COL_FLIP_HEADER_ACTIVE);
     }
-    ImGui::Checkbox(u8"交替翻转", &cfg.alt_flip);
+    ImGui::Checkbox(tr(u8"交替翻转"), &cfg.alt_flip);
     if (cfg.alt_flip) {
         ImGui::Indent(16);
-        static const char* flip_types[] = {
-            u8"左右翻转",
-            u8"上下翻转",
-            u8"顺时针旋转",
-            u8"逆时针旋转"
+        const char* flip_types[] = {
+            tr(u8"左右翻转"),
+            tr(u8"上下翻转"),
+            tr(u8"顺时针旋转"),
+            tr(u8"逆时针旋转")
         };
         int flip_idx = 0;
         if (cfg.flip_type == FLIP_HORIZONTAL) flip_idx = 0;
@@ -645,51 +666,51 @@ void render_config_panel() {
         else if (cfg.flip_type == FLIP_CW) flip_idx = 2;
         else if (cfg.flip_type == FLIP_CCW) flip_idx = 3;
         ImGui::SetNextItemWidth(120);
-        ImGui::Combo(u8"翻转方向", &flip_idx, flip_types, 4);
+        ImGui::Combo(tr(u8"翻转方向"), &flip_idx, flip_types, 4);
         if (flip_idx == 0) cfg.flip_type = FLIP_HORIZONTAL;
         else if (flip_idx == 1) cfg.flip_type = FLIP_VERTICAL;
         else if (flip_idx == 2) cfg.flip_type = FLIP_CW;
         else cfg.flip_type = FLIP_CCW;
 
-        static const char* counter_modes[] = { u8"全部", u8"图层" };
+        const char* counter_modes[] = { tr(u8"全部"), tr(u8"图层") };
         ImGui::SetNextItemWidth(100);
-        ImGui::Combo(u8"计数模式", &cfg.flip_counter_mode, counter_modes, 2);
+        ImGui::Combo(tr(u8"计数模式"), &cfg.flip_counter_mode, counter_modes, 2);
         ImGui::Unindent(16);
     }
     if (flip_highlight) {
         ImGui::PopStyleColor(6);
     }
-    ImGui::Checkbox(u8"无节拍同步", &cfg.beatless_sync);
-    ImGui::Checkbox(u8"向上取整帧", &cfg.use_round_up);
+    ImGui::Checkbox(tr(u8"无节拍同步"), &cfg.beatless_sync);
+    ImGui::Checkbox(tr(u8"向上取整帧"), &cfg.use_round_up);
 
     ImGui::Spacing();
-    ImGui::Text(u8"物件与音符同步");
+    ImGui::Text("%s", tr(u8"物件与音符同步"));
     ImGui::Separator();
 
-    static const char* sync_labels[] = {
-        u8"与音符对齐",
-        u8"拉伸到下一音符",
-        u8"拉伸到固定值",
-        u8"仅在间隙生成",
-        u8"仅在间隙并拉伸固定值"
+    const char* sync_labels[] = {
+        tr(u8"与音符对齐"),
+        tr(u8"拉伸到下一音符"),
+        tr(u8"拉伸到固定值"),
+        tr(u8"仅在间隙生成"),
+        tr(u8"仅在间隙并拉伸固定值")
     };
-    ImGui::Combo(u8"同步模式", &cfg.sync_mode, sync_labels, 5);
+    ImGui::Combo(tr(u8"同步模式"), &cfg.sync_mode, sync_labels, 5);
     if (cfg.sync_mode == 2 || cfg.sync_mode == 4) {
         ImGui::Indent(16);
-        ImGui::InputInt(u8"固定帧数", &cfg.fixed_duration_frames, 1, 10);
+        ImGui::InputInt(tr(u8"固定帧数"), &cfg.fixed_duration_frames, 1, 10);
         if (cfg.fixed_duration_frames < 1) cfg.fixed_duration_frames = 1;
         ImGui::Unindent(16);
     }
 
-    static const char* layer_strategy_labels[] = { u8"优化模式", u8"持续累加模式", u8"交替换行" };
-    ImGui::Combo(u8"层分配策略", &cfg.layer_strategy, layer_strategy_labels, 3);
-    ImGui::Checkbox(u8"反转轨道顺序", &cfg.reverse_layer_order);
+    const char* layer_strategy_labels[] = { tr(u8"优化模式"), tr(u8"持续累加模式"), tr(u8"交替换行") };
+    ImGui::Combo(tr(u8"层分配策略"), &cfg.layer_strategy, layer_strategy_labels, 3);
+    ImGui::Checkbox(tr(u8"反转轨道顺序"), &cfg.reverse_layer_order);
 
-    static const char* track_filter_labels[] = { u8"全部独立", u8"仅取第N轨", u8"仅取倒数第N轨" };
-    ImGui::Combo(u8"多音符策略", &cfg.track_filter_mode, track_filter_labels, 3);
+    const char* track_filter_labels[] = { tr(u8"全部独立"), tr(u8"仅取第N轨"), tr(u8"仅取倒数第N轨") };
+    ImGui::Combo(tr(u8"多音符策略"), &cfg.track_filter_mode, track_filter_labels, 3);
     if (cfg.track_filter_mode != 0) {
         ImGui::Indent(16);
-        ImGui::InputInt(u8"N", &cfg.track_filter_n, 1, 1);
+        ImGui::InputInt(tr(u8"N"), &cfg.track_filter_n, 1, 1);
         if (cfg.track_filter_n < 1) cfg.track_filter_n = 1;
         ImGui::Unindent(16);
     }
@@ -700,10 +721,10 @@ void render_config_panel() {
     // Phase 4: 多源映射（仅当模板池 >= 2 时显示）
     if (g_template_pool.size() >= 2) {
         ImGui::Spacing();
-        ImGui::Text(u8"多模板映射");
+        ImGui::Text("%s", tr(u8"多模板映射"));
         ImGui::Separator();
 
-        ImGui::TextDisabled(u8"当前模板池: %d 个物件（按时间轴顺序）", (int)g_template_pool.size());
+        ImGui::TextDisabled(tr(u8"当前模板池: %d 个物件（按时间轴顺序）"), (int)g_template_pool.size());
         for (size_t i = 0; i < g_template_pool.size(); i++) {
             if (i > 0) ImGui::SameLine();
             ImGui::Text("[%s]", g_template_pool[i].display_name.c_str());
@@ -713,28 +734,28 @@ void render_config_panel() {
         if (strategy_idx < 0) strategy_idx = 0;
         if (strategy_idx > 2) strategy_idx = 2;
 
-        ImGui::RadioButton(u8"顺序轮替", &strategy_idx, 0);
+        ImGui::RadioButton(tr(u8"顺序轮替"), &strategy_idx, 0);
         if (strategy_idx == 0) {
             ImGui::Indent(24);
-            static const char* order_labels[] = { u8"顺序", u8"倒序", u8"洗牌" };
-            ImGui::Combo(u8"##seq_order", &cfg.mapping_sequential_order, order_labels, 3);
+            const char* order_labels[] = { tr(u8"顺序"), tr(u8"倒序"), tr(u8"洗牌") };
+            ImGui::Combo("##seq_order", &cfg.mapping_sequential_order, order_labels, 3);
             ImGui::Unindent(24);
         }
 
-        ImGui::RadioButton(u8"随机抽选", &strategy_idx, 1);
+        ImGui::RadioButton(tr(u8"随机抽选"), &strategy_idx, 1);
         if (strategy_idx == 1) {
             ImGui::Indent(24);
-            ImGui::Checkbox(u8"禁止连续重复", &cfg.mapping_no_consecutive);
+            ImGui::Checkbox(tr(u8"禁止连续重复"), &cfg.mapping_no_consecutive);
             ImGui::Unindent(24);
         }
 
-        ImGui::RadioButton(u8"和弦映射", &strategy_idx, 2);
+        ImGui::RadioButton(tr(u8"和弦映射"), &strategy_idx, 2);
         if (strategy_idx == 2) {
             ImGui::Indent(24);
             if (cfg.track_filter_mode != 0) {
-                ImGui::TextColored(UI::COL_WARNING_TEXT, u8"⚠ 需要多音符策略设为“全部独立”");
+                ImGui::TextColored(UI::COL_WARNING_TEXT, "⚠ %s", tr(u8"需要多音符策略设为\"全部独立\""));
             } else {
-                ImGui::TextDisabled(u8"使用和弦位置分配模板");
+                ImGui::TextDisabled("%s", tr(u8"使用和弦位置分配模板"));
             }
             ImGui::Unindent(24);
         }
@@ -748,7 +769,7 @@ void render_config_panel() {
 // ---------------------------------------------------------------------------
 void render_action_bar() {
     ImGui::Separator();
-    if (ImGui::Button(u8"重新选择文件...", ImVec2(140, 0))) {
+    if (ImGui::Button(tr(u8"重新选择文件..."), ImVec2(140, 0))) {
         imgui_window_hide();
         show_file_picker(GetActiveWindow(), [](const std::wstring& path) {
             if (parse_project_file(path)) {
@@ -760,12 +781,12 @@ void render_action_bar() {
     float right_x = ImGui::GetContentRegionAvail().x - 110 - 110 - ImGui::GetStyle().ItemSpacing.x;
     ImGui::SameLine(right_x);
 
-    if (ImGui::Button(u8"应用", ImVec2(110, 30))) {
+    if (ImGui::Button(tr(u8"应用"), ImVec2(110, 30))) {
         if (g_project_state.has_data)
             imgui_window_trigger_generate();
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"确定", ImVec2(110, 30))) {
+    if (ImGui::Button(tr(u8"确定"), ImVec2(110, 30))) {
         if (g_project_state.has_data) {
             imgui_window_trigger_generate();
             imgui_window_hide();

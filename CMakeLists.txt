@@ -6,18 +6,28 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MINGW)
     # 全量静态链接 MinGW 运行时（libgcc, libstdc++, libwinpthread），消除外部 DLL 依赖
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static -w")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static -w -fno-char8_t")
 endif()
 
 set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/src/thirdparty/imgui)
 
+file(READ "${CMAKE_SOURCE_DIR}/src/i18n/lang/zh-CN.ini" ZH_CN_INI)
+file(READ "${CMAKE_SOURCE_DIR}/src/i18n/lang/en.ini" EN_INI)
+file(READ "${CMAKE_SOURCE_DIR}/src/i18n/lang/ja.ini" JA_INI)
+configure_file(
+    "${CMAKE_SOURCE_DIR}/src/i18n/i18n_embedded.h.in"
+    "${CMAKE_SOURCE_DIR}/src/i18n/i18n_embedded.h"
+    @ONLY
+)
+
 add_library(AutoZWJ SHARED
     src/plugin.cpp
+    src/i18n/i18n.cpp
     src/codec/codec.cpp
     src/chain/template_chain.cpp
     src/generation/generation.cpp

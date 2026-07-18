@@ -12,6 +12,9 @@ dist/
 build/
 build-rel/
 
+# Generated files
+src/i18n/i18n_embedded.h
+
 # AviUtl2 CLI
 /.aviutl2-cli
 /release
