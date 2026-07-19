@@ -156,6 +156,8 @@ void remove_file_from_history(int index);
 void update_current_project_offset(double offset);
 void sync_scene_info();
 
+std::string host_translate_effect_name(const std::string& ja_name);
+
 void select_all_tracks();
 void deselect_all_tracks();
 void invert_track_selection();

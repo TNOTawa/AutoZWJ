@@ -1,5 +1,6 @@
 #include "plugin.h"
 #include "i18n/i18n.h"
+#include "config2.h"
 #include "parsers/rpp/rpp_parser.h"
 #include "parsers/midi/midi_parser.h"
 #include "exo/object_generator.h"
@@ -17,6 +18,7 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
+#include <unordered_set>
 
 ProjectState g_project_state;
 SceneInfo g_scene_info;
@@ -59,6 +61,65 @@ EXTERN_C __declspec(dllexport) DWORD RequiredVersion() {
 
 EXTERN_C __declspec(dllexport) void InitializeLogger(LOG_HANDLE* handle) {
     g_logger = handle;
+}
+
+static CONFIG_HANDLE* g_config_handle = nullptr;
+static std::vector<std::wstring> g_plugin_sections;
+
+static void scan_plugin_language_sections() {
+    g_plugin_sections.clear();
+    if (!g_config_handle || !g_config_handle->app_data_path) return;
+
+    std::wstring lang_dir = std::wstring(g_config_handle->app_data_path) + L"\\Language\\*.aul2";
+
+    WIN32_FIND_DATAW fd;
+    HANDLE hFind = FindFirstFileW(lang_dir.c_str(), &fd);
+    if (hFind == INVALID_HANDLE_VALUE) return;
+
+    std::unordered_set<std::wstring> seen;
+    do {
+        std::wstring fname(fd.cFileName);
+        size_t dot = fname.find(L'.');
+        if (dot == std::wstring::npos || dot == 0) continue;
+        std::wstring section = fname.substr(dot + 1);
+        size_t ext = section.rfind(L".aul2");
+        if (ext == std::wstring::npos) continue;
+        section = section.substr(0, ext);
+        if (section.empty() || section == L"Effect") continue;
+        if (seen.insert(section).second) {
+            g_plugin_sections.push_back(std::move(section));
+        }
+    } while (FindNextFileW(hFind, &fd));
+    FindClose(hFind);
+}
+
+static Lang detect_aviutl2_lang() {
+    if (!g_config_handle) return Lang::ZhCN;
+    LPCWSTR r = g_config_handle->get_language_text(g_config_handle, L"Effect", L"動画ファイル");
+    if (!r) return Lang::ZhCN;
+    if (wcscmp(r, L"视频文件") == 0) return Lang::ZhCN;
+    if (wcscmp(r, L"VideoFile") == 0) return Lang::En;
+    return Lang::Ja;
+}
+
+std::string host_translate_effect_name(const std::string& ja_name) {
+    if (!g_config_handle || ja_name.empty()) return ja_name;
+    std::wstring w_key = utf8_to_wide(ja_name);
+
+    LPCWSTR result = g_config_handle->get_language_text(g_config_handle, L"Effect", w_key.c_str());
+    if (result && wcscmp(result, w_key.c_str()) != 0) return wide_to_utf8(result);
+
+    for (const auto& section : g_plugin_sections) {
+        result = g_config_handle->get_language_text(g_config_handle, section.c_str(), w_key.c_str());
+        if (result && wcscmp(result, w_key.c_str()) != 0) return wide_to_utf8(result);
+    }
+    return ja_name;
+}
+
+EXTERN_C __declspec(dllexport) void InitializeConfig(CONFIG_HANDLE* config) {
+    g_config_handle = config;
+    scan_plugin_language_sections();
+    i18n_set_host_lang_detector(detect_aviutl2_lang);
 }
 
 EXTERN_C __declspec(dllexport) bool InitializePlugin(DWORD version) {

@@ -10,6 +10,7 @@
 static const char* kSettingsPath = nullptr;
 static std::unordered_map<std::string, std::string> g_translation[3];
 static Lang g_current_lang = Lang::ZhCN;
+static HostLangDetector g_host_lang_detector = nullptr;
 
 static void trim(std::string& s) {
     while (!s.empty() && (unsigned char)s.front() <= ' ') s.erase(0, 1);
@@ -102,7 +103,11 @@ static void load_settings() {
         else if (wcscmp(val, L"ja") == 0)    g_current_lang = Lang::Ja;
         else g_current_lang = detect_sys_lang();
     } else {
-        g_current_lang = detect_sys_lang();
+        if (g_host_lang_detector) {
+            g_current_lang = g_host_lang_detector();
+        } else {
+            g_current_lang = detect_sys_lang();
+        }
     }
 }
 
@@ -144,4 +149,8 @@ Lang get_language() {
 
 int get_language_index() {
     return static_cast<int>(g_current_lang);
+}
+
+void i18n_set_host_lang_detector(HostLangDetector detector) {
+    g_host_lang_detector = detector;
 }

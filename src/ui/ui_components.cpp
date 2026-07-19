@@ -301,6 +301,23 @@ void render_nav_bar() {
         ImGui::EndMenu();
     }
 
+    // 语言设置菜单
+    if (ImGui::BeginMenu(tr(u8"语言设置"))) {
+        int lang_idx = get_language_index();
+        if (ImGui::MenuItem(u8"中文", nullptr, lang_idx == 0)) {
+            set_language(Lang::ZhCN);
+        }
+        if (ImGui::MenuItem("English", nullptr, lang_idx == 1)) {
+            set_language(Lang::En);
+        }
+        if (ImGui::MenuItem(u8"日本語", nullptr, lang_idx == 2)) {
+            set_language(Lang::Ja);
+        }
+        ImGui::Separator();
+        ImGui::TextDisabled("%s", tr(u8"宿主菜单需重启 AviUtl2 生效"));
+        ImGui::EndMenu();
+    }
+
     // 右侧：效果链编辑（粗体、高亮背景）
     float bar_width = ImGui::GetWindowWidth();
     float left_x = ImGui::GetCursorPosX();
@@ -523,15 +540,6 @@ static void render_header_panel() {
     if (ImGui::BeginPopupModal("##preferences", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("%s", tr(u8"首选项"));
         ImGui::Separator();
-        ImGui::Text("%s", tr(u8"语言"));
-        ImGui::SameLine();
-        const char* lang_names[] = { u8"简体中文", "English", u8"日本語" };
-        int lang_idx = get_language_index();
-        ImGui::SetNextItemWidth(150);
-        if (ImGui::Combo("##lang_combo", &lang_idx, lang_names, 3)) {
-            set_language(static_cast<Lang>(lang_idx));
-        }
-        ImGui::Spacing();
         ImGui::TextDisabled("%s", tr(u8"宿主菜单需重启 AviUtl2 生效"));
         ImGui::Spacing();
         if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {

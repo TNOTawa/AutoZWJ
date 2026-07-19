@@ -574,7 +574,7 @@ void render_effect_chain_panel() {
         } else {
             auto& eff = g_template_effects[item.effect_index];
             int active_count = count_active_bakes_for_effect((int)item.effect_index);
-            std::string label = (eff.effect_name_zh.empty() ? eff.effect_name : eff.effect_name_zh);
+            std::string label = host_translate_effect_name(eff.effect_name);
             if (active_count > 0) label += " (" + std::to_string(active_count) + ")";
             label += "##effect" + std::to_string(item.effect_index);
 
@@ -660,7 +660,7 @@ void render_effect_chain_panel() {
                         }
                         return "...";
                     };
-                    std::string display_name = truncate_name(param.first, 70.0f);
+                    std::string display_name = truncate_name(host_translate_effect_name(param.first), 70.0f);
 
                     ImGui::SameLine();
                     ImGui::TextUnformatted(display_name.c_str());

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AutoZWJ VERSION 0.2.3 LANGUAGES CXX)
+project(AutoZWJ VERSION 0.2.4 LANGUAGES CXX)
 
 # 默认 Release 构建，防止忘记传 -DCMAKE_BUILD_TYPE=Release
 if(NOT CMAKE_BUILD_TYPE)
