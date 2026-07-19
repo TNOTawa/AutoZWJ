@@ -4,7 +4,7 @@
 
 | 工具 | 版本 | 说明 |
 |------|------|------|
-| MinGW-w64 | g++ 15.2+ | 构建自包含的静态 DLL |
+| MinGW-w64 | g++ 15.2+ (需支持 C++20) | 构建自包含的静态 DLL |
 | CMake | 3.20+ | 构建系统 |
 | Dear ImGui | docking branch | 置于 `src/thirdparty/imgui/` |
 | DirectX 11 SDK | — | Windows 自带 |
@@ -27,10 +27,17 @@ cmake --build build
 ```
 src/
 ├── plugin.h/cpp                    # 插件入口、回调注册、生成引擎、层分配、变量绑定
+├── i18n/
+│   ├── i18n.h/cpp                  # 多语言运行时（tr/tr_str/tr_fmt）
+│   └── lang/
+│       ├── zh-CN.ini               # 简体中文语言资源（key = 中文原文）
+│       ├── en.ini                   # 英语语言资源
+│       └── ja.ini                  # 日本語语言资源
 ├── parsers/
 │   ├── rpp/rpp_parser.h/cpp        # REAPER .rpp 解析器
 │   ├── midi/midi_parser.h/cpp      # SMF .mid 解析器
-│   └── lrc/lrc_parser.h/cpp        # LRC 歌词解析器
+│   ├── lrc/lrc_parser.h/cpp        # LRC 歌词解析器
+│   └── tempo_convert.h             # tempo_map → BPM_INFO[] 共享转换（仅头文件）
 ├── codec/codec.h/cpp               # 字符编码转换（utf8/wide/cp932）
 ├── chain/template_chain.h/cpp      # 模板效果链提取与解析
 ├── generation/generation.h/cpp     # 物件生成引擎（纯数据黑盒）
@@ -43,9 +50,11 @@ src/
 │   ├── file_picker.h/cpp           # 原生 Win32 OPENFILENAME 文件选择
 │   ├── project_state.cpp           # 解析调度、持久化、工程历史管理
 │   ├── imgui_window.h/cpp          # Dear ImGui + DX11 独立窗口
-│   ├── ui_config.h                 # UI 风格常量（字体、颜色、间距）
+│   ├── ui_config.h                 # UI 风格常量（字体、色彩系统、主题注入）
 │   ├── ui_components.h/cpp         # 轨道树、导入/配置页面、参数面板
 │   └── effect_chain_editor.h/cpp   # 效果链编辑器面板（参数 bake + 变量映射 + 预设拖拽）
+├── tools/
+│   └── tempo/tempo_apply.h/cpp     # BPM 网格同步工具
 └── thirdparty/imgui/               # Dear ImGui docking 分支
 ```
 
@@ -81,6 +90,10 @@ src/
 ### AviUtl2 Round-trip 行为
 
 `create_object_from_alias()` → `get_object_alias()` 往返会剥离非标准 section。因此自定义数据不能存在 alias 内，必须外移到 `PROJECT_FILE`。
+
+### C++20
+
+项目使用 C++20 标准，主要用到了 `std::format`（`tr_fmt` 模板函数）和 `constexpr` 增强（色彩系统）。语言文件通过 CMake `configure_file()` 在构建时嵌入，无需运行时文件 I/O。
 
 ---
 

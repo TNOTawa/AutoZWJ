@@ -1,20 +1,20 @@
 [中文](../../README.md) | [English](.) | [日本語](../ja/README.md)
 
-> **Note:** i18n support for languages other than Chinese is not yet available. Please wait for the next version.
-
 # AutoZWJ
 
 > RPP / MIDI → AviUtl2 Object Batch Import Plugin
 
-Import media items from REAPER project files (`.rpp`) or standard MIDI files (`.mid`) into the AviUtl2 timeline as objects, using existing objects as style templates.
+Import media items from REAPER project files (`.rpp`), standard MIDI files (`.mid`), or LRC lyrics files (`.lrc`) into the AviUtl2 timeline as objects, using existing objects as style templates.
 
 ## Features
 
-- Parse REAPER `.rpp` / standard MIDI `.mid` project files (more formats coming soon)
+- Parse REAPER `.rpp` / standard MIDI `.mid` / LRC `.lrc` files
 - Use existing timeline objects as **style templates**, inheriting their effect chains and parameters
 - **Multi-source mapping** — assign templates using configurable strategies (sequential rotation / random selection / chord mapping)
 - **Effect chain editor** — view template effect chains, bake parameters with fixed values / variable mapping / expression evaluation
 - **Script variable system** — expression-driven bake values like `$note.velocity$ / 127 * 200`
+- **BPM grid sync** — apply tempo maps from MIDI/RPP to AviUtl2's BPM grid
+- **i18n support** — UI available in Chinese, English, Japanese; auto-detects host UI language
 - Automatic layer allocation below the template, compactly arranged
 - Alternating flips, object duration control, multi-note strategies, alternating row layout
 - All parameters automatically read from the current scene (FPS, resolution) and persisted across sessions

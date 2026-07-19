@@ -160,3 +160,61 @@ primary  = number | identifier [ "(" args ")" ] | "(" expr ")"
 ## 文件拖放支持（存在问题）
 
 插件注册了文件拖放处理器（可能需要手动去`设置 - 导入插件设置`中设定文件后缀），支持将工程文件直接拖入 AviUtl2 窗口自动解析。拖放后会自动将文件加入历史记录。
+
+---
+
+## BPM 网格同步工具
+
+`tools/tempo/tempo_apply.cpp` 实现了从解析后的 tempo map 到 AviUtl2 `set_grid_bpm_list` 的桥接：
+
+### Tempo Map 统一转换
+
+`tempo_map_to_bpm_info()`（`parsers/tempo_convert.h`）负责将 MIDI 和 RPP 两种来源的 tempo map 统一转换为 `BPM_INFO[]` 格式：
+
+- 在**秒域**进行统一计算，不依赖 tick 或 beat 单位
+- 拍号变化触发小节起点重置，tempo 变化按当前小节时长对齐
+- 同时间点多事件时，拍号优先于 tempo
+- 基准时间偏移叠加到每个 `BPM_INFO.start` 上
+
+### 触发方式
+
+- 菜单栏：工具 → 应用BPM网格到时间轴
+- 配置页面：轨道树区域上方的「应用BPM网格到时间轴」按钮
+- 通过 `call_edit_section_param` 回调写入，不自动持久化
+
+---
+
+## 国际化（i18n）
+
+`src/i18n/` 模块提供运行时多语言支持：
+
+### 语言资源
+
+| 文件 | 语言 |
+|------|------|
+| `src/i18n/lang/zh-CN.ini` | 简体中文（默认） |
+| `src/i18n/lang/en.ini` | 英语 |
+| `src/i18n/lang/ja.ini` | 日本語 |
+
+语言文件在 CMake 构建时通过 `configure_file()` 嵌入到 `i18n_embedded.h`，无需外部资源文件。
+
+### 语言检测与切换
+
+1. **首次启动**：调用 AviUtl2 SDK `get_language_text()` 检测宿主 UI 语言（通过 `HostLangDetector` 回调）
+2. **回退机制**：若宿主检测不可用，使用 `GetUserDefaultLocaleName()` 检测系统 locale
+3. **手动切换**：菜单「语言设置」可手动选择 zh-CN / en / ja
+4. **持久化**：选择写入 `%APPDATA%\AutoZWJ\settings.ini` 的 `[AutoZWJ]` section
+
+### API
+
+```cpp
+void i18n_init();                          // 初始化：加载嵌入资源 + 读取设置
+const char* tr(const char* zh_key);        // 查字典，未命中返回原文
+std::string tr_str(const char* zh_key);    // 返回 std::string 版本
+void set_language(Lang lang);              // 切换语言并持久化
+Lang get_language();                       // 获取当前语言
+template<typename... Args>
+std::string tr_fmt(zh_key, args...);       // 格式化翻译字符串（C++20 std::format）
+```
+
+所有 UI 字符串通过 `tr()` 包裹，以中文为 key 查询对应语言的翻译。效果名称通过 AviUtl2 SDK 的 `get_language_text()` 在运行时动态翻译。
