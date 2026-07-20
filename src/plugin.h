@@ -63,6 +63,7 @@ struct TemplateEntry {
     std::string display_name;
     int layer = 0;
     double sf = 0.0;
+    int ef = 0;              // 结束帧（0-based，含末帧），与 sf 配对用于推导物件时长
     std::string chain;
 };
 

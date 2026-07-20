@@ -258,6 +258,7 @@ static void on_open_config(EDIT_SECTION* edit) {
         auto lf = edit->get_object_layer_frame(obj);
         entry.layer = lf.layer;
         entry.sf = static_cast<double>(lf.start);
+        entry.ef = lf.end;
 
         LPCWSTR name_ptr = edit->get_object_name(obj);
         if (name_ptr && name_ptr[0]) {
@@ -288,6 +289,17 @@ static void on_open_config(EDIT_SECTION* edit) {
     g_project_state.template_alias = g_template_pool[0].alias;
     g_project_state.template_layer = g_template_pool[0].layer;
     g_current_template_idx = 0;
+
+    // 同步模式"拉伸到固定值"的默认帧数取主模板物件本身的时长（帧）。
+    // SDK 的 start/end 均为 0-based 且 end 为末帧（含），故帧数 = end - start + 1；
+    // 取值异常（<=0）时不修改，保持 OutputConfig 初值 30 作为兜底。
+    {
+        const auto& primary = g_template_pool[0];
+        int tpl_duration = primary.ef - static_cast<int>(primary.sf) + 1;
+        if (tpl_duration > 0) {
+            g_project_state.config.fixed_duration_frames = tpl_duration;
+        }
+    }
 
     int pool_size = static_cast<int>(g_template_pool.size());
     g_template_effects_per_tpl.assign(pool_size, {});
