@@ -1,4 +1,6 @@
 #include "rpp_parser.h"
+#include "host/host_context.h"
+#include "codec/codec.h"
 #include <fstream>
 #include <sstream>
 #include <map>

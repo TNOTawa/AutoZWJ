@@ -1,10 +1,11 @@
-#include "ui_components.h"
+﻿#include "ui_components.h"
 #include "i18n/i18n.h"
 #include "ui/ui_config.h"
 #include "effect/effect_dict.h"
 #include "ui/file_picker.h"
 #include "ui/imgui_window.h"
 #include "ui/effect_chain_editor.h"
+#include "chain/template_chain.h"
 #include "exo/object_generator.h"
 #include "tools/tempo/tempo_apply.h"
 #include <algorithm>
@@ -17,11 +18,11 @@ static bool g_show_no_project_popup = false;
 // 目录持久化
 // ---------------------------------------------------------------------------
 std::wstring load_last_directory() {
-    return g_project_state.last_directory;
+    return g_app.project.last_directory;
 }
 
 void save_last_directory(const std::wstring& dir) {
-    g_project_state.last_directory = dir;
+    g_app.project.last_directory = dir;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +130,7 @@ static bool GhostSmallButton(const char* label) {
 // 轨道树（复用组件，制表符直角分支可视化）
 // ---------------------------------------------------------------------------
 static void render_flat_track_node(size_t idx, bool read_only) {
-    auto& tracks = g_project_state.tracks;
+    auto& tracks = g_app.project.tracks;
     TrackNode& node = tracks[idx];
     int d = node.depth;
     bool is_empty = (node.count <= 0);
@@ -243,7 +244,7 @@ static void render_flat_track_node(size_t idx, bool read_only) {
 }
 
 void render_track_tree(bool read_only) {
-    if (!g_project_state.has_data) {
+    if (!g_app.project.has_data) {
         ImGui::TextDisabled("%s", tr(u8"未加载音频工程"));
         return;
     }
@@ -252,18 +253,18 @@ void render_track_tree(bool read_only) {
     ImGui::SameLine();
 
     if (!read_only) {
-        if (GhostSmallButton(tr(u8"全选"))) select_all_tracks();
+        if (GhostSmallButton(tr(u8"全选"))) select_all_tracks(g_app);
         ImGui::SameLine();
-        if (GhostSmallButton(tr(u8"取消"))) deselect_all_tracks();
+        if (GhostSmallButton(tr(u8"取消"))) deselect_all_tracks(g_app);
         ImGui::SameLine();
-        if (GhostSmallButton(tr(u8"反选"))) invert_track_selection();
+        if (GhostSmallButton(tr(u8"反选"))) invert_track_selection(g_app);
     } else {
         ImGui::TextDisabled("%s", tr(u8"(只读预览)"));
     }
 
     ImGui::Separator();
 
-    for (size_t i = 0; i < g_project_state.tracks.size(); i++) {
+    for (size_t i = 0; i < g_app.project.tracks.size(); i++) {
         render_flat_track_node(i, read_only);
     }
 }
@@ -292,7 +293,7 @@ void render_nav_bar() {
     // 工具菜单
     if (ImGui::BeginMenu(tr(u8"工具"))) {
         if (ImGui::MenuItem(tr(u8"应用BPM网格到时间轴"))) {
-            if (g_project_state.has_data) {
+            if (g_app.project.has_data) {
                 apply_bpm_grid();
             } else {
                 g_show_no_project_popup = true;
@@ -406,7 +407,7 @@ void render_import_page() {
             bool is_selected = (selected_recent_idx == i);
             if (ImGui::Selectable(name.c_str(), is_selected)) {
                 selected_recent_idx = i;
-                if (parse_project_file(recent_files[i])) {
+                if (select_project(g_app, recent_files[i])) {
                     size_t sep = recent_files[i].find_last_of(L"\\/");
                     if (sep != std::wstring::npos) {
                         save_last_directory(recent_files[i].substr(0, sep));
@@ -424,7 +425,7 @@ void render_import_page() {
     if (GhostButton(tr(u8"浏览..."))) {
         std::wstring init_dir = load_last_directory();
         show_file_picker(GetActiveWindow(), [](const std::wstring& path) {
-            if (parse_project_file(path)) {
+            if (select_project(g_app, path)) {
                 size_t sep = path.find_last_of(L"\\/");
                 if (sep != std::wstring::npos) {
                     save_last_directory(path.substr(0, sep));
@@ -438,13 +439,13 @@ void render_import_page() {
 
     ImGui::Text("%s", tr(u8"导入选项"));
     ImGui::Separator();
-    if (ImGui::InputDouble(tr(u8"基准时间（秒）"), &g_project_state.config.base_time_sec, 0.1, 1.0, "%.1f")) {
-        update_current_project_offset(g_project_state.config.base_time_sec);
+    if (ImGui::InputDouble(tr(u8"基准时间（秒）"), &g_app.project.config.base_time_sec, 0.1, 1.0, "%.1f")) {
+        update_current_project_offset(g_app, g_app.project.config.base_time_sec);
     }
 
     ImGui::Spacing();
     if (ImGui::Button(tr(u8"应用BPM网格到时间轴"), ImVec2(200, 0))) {
-        if (g_project_state.has_data) {
+        if (g_app.project.has_data) {
             apply_bpm_grid();
         } else {
             g_show_no_project_popup = true;
@@ -464,10 +465,13 @@ void render_import_page() {
 
     // --- 底部固定确认导入按钮 ---
     if (ImGui::Button(tr(u8"确认导入"), ImVec2(140, 35))) {
-        if (g_project_state.has_data) {
-            if (!g_project_state.template_alias.empty()) {
-                if (g_template_aliases.empty()) {
-                    g_template_aliases.push_back(g_project_state.template_alias);
+        if (g_app.project.has_data) {
+            if (!g_app.project.template_alias.empty()) {
+                if (g_app.templates.empty()) {
+                    TemplateEntry te;
+                    te.alias = g_app.project.template_alias;
+                    te.chain = extract_template_chain(te.alias);
+                    g_app.templates.push_back({std::move(te), {}, {}, {}});
                     refresh_template_effects();
                 }
                 g_current_page = AppPage::Config;
@@ -480,7 +484,7 @@ void render_import_page() {
     }
 
     if (ImGui::BeginPopupModal(tr(u8"提示"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (!g_project_state.has_data) {
+        if (!g_app.project.has_data) {
             ImGui::Text("%s", tr(u8"请先选择一个工程文件"));
         } else {
             ImGui::Text("%s", tr(u8"工程已导入，但尚未选择模板物件。\n请右键时间轴物件选择配置导入"));
@@ -498,9 +502,9 @@ void render_import_page() {
 static void render_header_panel() {
     std::string preview;
     std::string stats;
-    if (g_project_state.has_data) {
-        preview = wide_to_utf8(g_project_state.file_name);
-        std::wstring summary = get_project_summary();
+    if (g_app.project.has_data) {
+        preview = wide_to_utf8(g_app.project.file_name);
+        std::wstring summary = get_project_summary(g_app);
         std::string summary_utf8 = wide_to_utf8(summary);
         size_t sep = summary_utf8.find(" | ");
         if (sep != std::string::npos) {
@@ -515,24 +519,24 @@ static void render_header_panel() {
         if (ImGui::Selectable(tr(u8"导入新工程..."))) {
             g_current_page = AppPage::Import;
         }
-        if (!g_project_state.file_history.empty()) {
+        if (!g_app.project.file_history.empty()) {
             ImGui::Separator();
             ImGui::TextDisabled("%s", tr(u8"历史记录"));
         }
-        for (int i = 0; i < (int)g_project_state.file_history.size(); i++) {
-            const std::wstring& path = g_project_state.file_history[i].path;
+        for (int i = 0; i < (int)g_app.project.file_history.size(); i++) {
+            const std::wstring& path = g_app.project.file_history[i].path;
             std::string name = wide_to_utf8(path);
             size_t sep = name.find_last_of("\\/");
             std::string display = (sep != std::string::npos) ? name.substr(sep + 1) : name;
-            bool is_selected = (g_project_state.has_data && g_project_state.file_path == path);
+            bool is_selected = (g_app.project.has_data && g_app.project.file_path == path);
 
             ImGui::PushID(i);
             if (ImGui::Selectable(display.c_str(), is_selected)) {
-                parse_project_file(path);
+                select_project(g_app, path);
             }
             if (ImGui::BeginPopupContextItem()) {
                 if (ImGui::MenuItem(tr(u8"删除记录"))) {
-                    remove_file_from_history(i);
+                    remove_file_from_history(g_app, i);
                 }
         ImGui::EndPopup();
     }
@@ -558,10 +562,10 @@ static void render_header_panel() {
     if (!stats.empty()) {
         ImGui::SameLine();
         ImGui::TextDisabled("| %s", stats.c_str());
-    } else if (!g_project_state.has_data && !g_project_state.file_history.empty()) {
+    } else if (!g_app.project.has_data && !g_app.project.file_history.empty()) {
         ImGui::SameLine();
         ImGui::TextDisabled("%s", tr(u8"(从下拉框选择历史工程，或导入新工程)"));
-    } else if (!g_project_state.has_data) {
+    } else if (!g_app.project.has_data) {
         ImGui::SameLine();
         ImGui::TextColored(UI::COL_HINT_TEXT,
             tr(u8"（文件 \u2192 工程导入页面）"));
@@ -633,15 +637,15 @@ void render_config_page() {
 // 参数设置面板
 // ---------------------------------------------------------------------------
 void render_config_panel() {
-    OutputConfig& cfg = g_project_state.config;
-    SceneInfo& info = g_scene_info;
+    OutputConfig& cfg = g_app.project.config;
+    SceneInfo& info = g_app.scene;
 
     ImGui::Text("%s", tr(u8"场景信息"));
     ImGui::Separator();
     ImGui::Text("%d x %d @ %d/%d fps  |  %d Hz",
         info.width, info.height, info.rate, info.scale, info.sample_rate);
 
-    if (g_scene_info.valid) {
+    if (g_app.scene.valid) {
         cfg.fps_num = info.rate;
         cfg.fps_den = info.scale;
     }
@@ -727,15 +731,15 @@ void render_config_panel() {
     cfg.no_gap = (cfg.sync_mode == 1);
 
     // Phase 4: 多源映射（仅当模板池 >= 2 时显示）
-    if (g_template_pool.size() >= 2) {
+    if (g_app.templates.size() >= 2) {
         ImGui::Spacing();
         ImGui::Text("%s", tr(u8"多模板映射"));
         ImGui::Separator();
 
-        ImGui::TextDisabled(tr(u8"当前模板池: %d 个物件（按时间轴顺序）"), (int)g_template_pool.size());
-        for (size_t i = 0; i < g_template_pool.size(); i++) {
+        ImGui::TextDisabled(tr(u8"当前模板池: %d 个物件（按时间轴顺序）"), (int)g_app.templates.size());
+        for (size_t i = 0; i < g_app.templates.size(); i++) {
             if (i > 0) ImGui::SameLine();
-            ImGui::Text("[%s]", g_template_pool[i].display_name.c_str());
+            ImGui::Text("[%s]", g_app.templates[i].source.display_name.c_str());
         }
 
         int strategy_idx = cfg.mapping_strategy - 1;
@@ -780,7 +784,7 @@ void render_action_bar() {
     if (ImGui::Button(tr(u8"重新选择文件..."), ImVec2(140, 0))) {
         imgui_window_hide();
         show_file_picker(GetActiveWindow(), [](const std::wstring& path) {
-            if (parse_project_file(path)) {
+            if (select_project(g_app, path)) {
                 imgui_window_show();
             }
         });
@@ -790,12 +794,12 @@ void render_action_bar() {
     ImGui::SameLine(right_x);
 
     if (ImGui::Button(tr(u8"应用"), ImVec2(110, 30))) {
-        if (g_project_state.has_data)
+        if (g_app.project.has_data)
             imgui_window_trigger_generate();
     }
     ImGui::SameLine();
     if (ImGui::Button(tr(u8"确定"), ImVec2(110, 30))) {
-        if (g_project_state.has_data) {
+        if (g_app.project.has_data) {
             imgui_window_trigger_generate();
             imgui_window_hide();
         }

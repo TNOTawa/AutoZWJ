@@ -1,10 +1,20 @@
 #include "generation/generation.h"
-#include "i18n/i18n.h"
 #include "exo/object_generator.h"
 #include "script/expr_evaluator.h"
 #include "script/variable_subst.h"
-#include "codec/codec.h"
 #include <algorithm>
+
+static std::vector<int> generate_shuffled_order(int pool_size, uint32_t seed) {
+    std::vector<int> order(pool_size);
+    for (int i = 0; i < pool_size; i++) order[i] = i;
+    for (int i = pool_size - 1; i > 0; i--) {
+        seed = seed * 1103515245u + 12345u;
+        int j = static_cast<int>(seed % static_cast<uint32_t>(i + 1));
+        std::swap(order[i], order[j]);
+    }
+    return order;
+}
+
 #include <sstream>
 #include <cmath>
 #include <cstdint>
@@ -28,7 +38,7 @@ struct ItemInterval {
 
 static int pick_template_index(int item_count_global, int chord_index, int pool_size,
                                 int strategy, const OutputConfig& config, int prev_tpl_idx,
-                                const std::vector<int>& shuffled_order, uint32_t seed_base) {
+                                const std::vector<int>& shuffled_order, uint32_t seed) {
     if (pool_size <= 1) return 0;
 
     switch (strategy) {
@@ -49,9 +59,9 @@ static int pick_template_index(int item_count_global, int chord_index, int pool_
         return idx;
     }
     case 2: {
-        uint32_t seed = seed_base ^ static_cast<uint32_t>(item_count_global * 2654435761u);
-        seed = seed * 1103515245u + 12345u;
-        int idx = static_cast<int>(seed % static_cast<uint32_t>(pool_size));
+        uint32_t rnd = seed ^ static_cast<uint32_t>(item_count_global * 2654435761u);
+        rnd = rnd * 1103515245u + 12345u;
+        int idx = static_cast<int>(rnd % static_cast<uint32_t>(pool_size));
         if (config.mapping_no_consecutive && idx == prev_tpl_idx && pool_size > 1) {
             idx = (idx + 1) % pool_size;
         }
@@ -344,7 +354,7 @@ static std::vector<ParamBake> evaluate_bakes_for_item(
     const std::unordered_map<std::string, double>& num_vars,
     const std::unordered_map<std::string, std::string>& text_vars,
     uint32_t rand_seed,
-    LOG_HANDLE* logger)
+    std::vector<std::string>& warnings)
 {
     ExprEvaluator evaluator;
     evaluator.set_vars(num_vars);
@@ -374,10 +384,10 @@ static std::vector<ParamBake> evaluate_bakes_for_item(
             double val = 0.0;
             std::string err;
             if (!evaluator.evaluate(substituted, val, err)) {
-                if (logger) {
+                {
                     std::string msg = "AutoZWJ: 表达式求值失败 [" + pb.param_name + "=\""
                                       + pb.param_value + "\"]: " + err;
-                    logger->warn(logger, utf8_to_wide(msg).c_str());
+                    warnings.push_back(msg);
                 }
                 eval_pb.active = false;
             } else {
@@ -423,12 +433,18 @@ static int assign_layer_impl(double obj_fp, double bf, std::vector<double>& targ
     return 0;
 }
 
-std::vector<GeneratedObject> generate_object_specs(const GenInput& in) {
+GenerationResult generate(const GenerationInput& in) {
     std::vector<GeneratedObject> specs;
+    std::vector<std::string> warnings;
 
-    auto& objdict = *in.objdict;
-    auto& tracks = *in.tracks;
-    auto& config = *in.config;
+    std::vector<int> shuffled_order;
+    if (in.config.mapping_strategy == 1 && in.config.mapping_sequential_order == 2 && in.templates.size() > 1) {
+        shuffled_order = generate_shuffled_order(static_cast<int>(in.templates.size()), in.seed);
+    }
+
+    auto& objdict = in.objdict;
+    auto& tracks = in.tracks;
+    auto& config = in.config;
     int base = in.base_layer;
 
     double fps = (double)config.fps_num / (double)config.fps_den;
@@ -610,7 +626,7 @@ std::vector<GeneratedObject> generate_object_specs(const GenInput& in) {
                     }
 
                     int prev_tpl_idx = -1;
-                    int pool_size = (int)in.template_pool.size();
+                    int pool_size = (int)in.templates.size();
 
                     for (size_t iv_idx = 0; iv_idx < intervals.size(); iv_idx++) {
                         auto& iv = intervals[iv_idx];
@@ -627,11 +643,11 @@ std::vector<GeneratedObject> generate_object_specs(const GenInput& in) {
                             tpl_idx = pick_template_index(
                                 item_count_global, iv.chord_index, pool_size,
                                 config.mapping_strategy, config, prev_tpl_idx,
-                                in.shuffled_order, in.seed_base);
+                                shuffled_order, in.seed);
                         }
 
-                        std::string tpl_chain = in.template_pool[tpl_idx].chain;
-                        const auto& tpl_bakes = (*in.bakes_per_tpl)[tpl_idx];
+                        std::string tpl_chain = in.templates[tpl_idx].source.chain;
+                        const auto& tpl_bakes = in.templates[tpl_idx].bakes;
 
                         int pitch_int = static_cast<int>(std::round(iv.pitch + 69.0));
                         uint32_t item_rand_seed = static_cast<uint32_t>(iv.idx * 100003LL + pitch_int * 10007LL + iv.sf * 17LL);
@@ -639,7 +655,7 @@ std::vector<GeneratedObject> generate_object_specs(const GenInput& in) {
                                                          item_count_global, total_items,
                                                          track_pitch_min, track_pitch_max);
                         auto text_vars = build_item_text_vars(iv.idx, objdict);
-                        auto evaluated_bakes = evaluate_bakes_for_item(tpl_bakes, num_vars, text_vars, item_rand_seed, in.logger);
+                        auto evaluated_bakes = evaluate_bakes_for_item(tpl_bakes, num_vars, text_vars, item_rand_seed, warnings);
 
                         std::vector<PresetEntry> item_presets;
                         int use_layer;
@@ -649,7 +665,7 @@ std::vector<GeneratedObject> generate_object_specs(const GenInput& in) {
                             if (config.alt_flip && config.flip_type != 0) {
                                 PresetEntry p;
                                 p.effect_block = build_flip_block(config.flip_type, flip_count);
-                                const auto& tpl_presets_ref = (*in.presets_per_tpl)[tpl_idx];
+                                const auto& tpl_presets_ref = in.templates[tpl_idx].presets;
                                 if (!tpl_presets_ref.empty()) {
                                     p.position = tpl_presets_ref[0].position;
                                 } else {
@@ -711,7 +727,7 @@ std::vector<GeneratedObject> generate_object_specs(const GenInput& in) {
                             if (config.alt_flip && config.flip_type != 0) {
                                 PresetEntry p;
                                 p.effect_block = build_flip_block(config.flip_type, layer_count);
-                                const auto& tpl_presets_ref = (*in.presets_per_tpl)[tpl_idx];
+                                const auto& tpl_presets_ref = in.templates[tpl_idx].presets;
                                 if (!tpl_presets_ref.empty()) {
                                     p.position = tpl_presets_ref[0].position;
                                 } else {
@@ -735,18 +751,24 @@ std::vector<GeneratedObject> generate_object_specs(const GenInput& in) {
                               << "\ncamera=" << config.is_ex_set << "\n"
                               << chain;
 
-                        std::wstring obj_name;
+                        GeneratedObject go;
+                        go.layer = use_layer;
+                        go.sf = iv.sf;
+                        go.ef = iv.ef;
+                        go.alias_chain = alias.str();
                         if (!iv.file_path.empty()) {
-                            obj_name = utf8_to_wide(iv.file_path);
-                            size_t sep = obj_name.find_last_of(L'\\');
-                            if (sep != std::wstring::npos) obj_name = obj_name.substr(sep + 1);
+                            go.name_kind = ObjNameKind::FilePath;
+                            go.name_text = iv.file_path;
+                            size_t sep = go.name_text.find_last_of('\\');
+                            if (sep != std::string::npos) go.name_text = go.name_text.substr(sep + 1);
                         } else if (is_gap_only) {
-                            obj_name = utf8_to_wide(tr_str(u8"Gap")) + L" " + std::to_wstring(item_count_global);
+                            go.name_kind = ObjNameKind::Gap;
+                            go.name_index = item_count_global;
                         } else {
-                            obj_name = utf8_to_wide(tr_str(u8"Item")) + L" " + std::to_wstring(item_count_global);
+                            go.name_kind = ObjNameKind::Item;
+                            go.name_index = item_count_global;
                         }
-
-                        specs.push_back({use_layer, iv.sf, iv.ef, alias.str(), obj_name});
+                        specs.push_back(go);
                         item_count_global++;
                     }
                 }
@@ -768,5 +790,5 @@ std::vector<GeneratedObject> generate_object_specs(const GenInput& in) {
             item_start = track_end;
     }
 
-    return specs;
+    return { specs, warnings };
 }

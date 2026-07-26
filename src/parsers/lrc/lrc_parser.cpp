@@ -1,4 +1,6 @@
 #include "lrc_parser.h"
+#include "host/host_context.h"
+#include "codec/codec.h"
 #include <sstream>
 #include <algorithm>
 #include <cstdlib>

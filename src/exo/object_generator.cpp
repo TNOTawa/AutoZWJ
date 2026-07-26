@@ -1,5 +1,6 @@
 #include "object_generator.h"
 #include "effect/effect_dict.h"
+#include "codec/codec.h"
 #include <cmath>
 #include <sstream>
 #include <algorithm>

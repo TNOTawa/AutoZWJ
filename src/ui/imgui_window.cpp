@@ -1,4 +1,4 @@
-#include "imgui_window.h"
+﻿#include "imgui_window.h"
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
@@ -284,11 +284,11 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
 
 void imgui_window_show() {
     if (!g_initialized) return;
-    if (!g_scene_info.valid) sync_scene_info();
+    if (!g_app.scene.valid) sync_scene_info();
     g_current_page = AppPage::Config;
     g_show_effect_editor = false;
-    g_current_template_idx = 0;
-    if (!g_template_pool.empty()) {
+    g_app.current_template_index = 0;
+    if (!g_app.templates.empty()) {
         load_template_data(0);
     } else {
         g_param_bakes.clear();
@@ -307,7 +307,7 @@ void imgui_window_show() {
 
 void imgui_window_show_import_page() {
     if (!g_initialized) return;
-    if (!g_scene_info.valid) sync_scene_info();
+    if (!g_app.scene.valid) sync_scene_info();
     g_current_page = AppPage::Import;
     ShowWindow(g_imgui_hwnd, SW_SHOW);
     SetForegroundWindow(g_imgui_hwnd);
@@ -319,9 +319,9 @@ void imgui_window_show_import_page() {
 
 void imgui_window_hide() {
     save_current_template_data();
-    if (g_edit_handle) {
-        g_edit_handle->call_edit_section_param(nullptr, [](void*, EDIT_SECTION* edit) {
-            flush_project_file_state(edit);
+    if (g_host.edit_handle) {
+        g_host.edit_handle->call_edit_section_param(nullptr, [](void*, EDIT_SECTION* edit) {
+            flush_project_file_state(edit, g_app, g_host);
         });
     }
     g_visible = false;

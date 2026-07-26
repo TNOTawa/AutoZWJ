@@ -2,29 +2,25 @@
 #include <vector>
 #include <string>
 #include <cstdint>
-#include "plugin.h"
-#include "ui/effect_chain_editor.h"
+#include <span>
+#include "core/project_model.h"
+#include "core/generation_model.h"
+#include "core/effect_model.h"
+#include "core/output_config.h"
 
-struct GenInput {
-    ObjDict* objdict;
-    std::vector<TrackNode>* tracks;
-    OutputConfig* config;
-    std::vector<TemplateEntry> template_pool;
-    std::vector<std::vector<ParamBake>>* bakes_per_tpl;
-    std::vector<std::vector<PresetEntry>>* presets_per_tpl;
+struct GenerationInput {
+    const ObjDict& objdict;
+    const std::vector<TrackNode>& tracks;
+    const OutputConfig& config;
+    std::span<const TemplateSession> templates;
     SceneInfo scene;
     int base_layer;
-    uint32_t seed_base;
-    std::vector<int> shuffled_order;
-    LOG_HANDLE* logger;
+    uint32_t seed;
 };
 
-struct GeneratedObject {
-    int layer;
-    int sf;
-    int ef;
-    std::string alias_chain;
-    std::wstring name;
+struct GenerationResult {
+    std::vector<GeneratedObject> objects;
+    std::vector<std::string> warnings;
 };
 
-std::vector<GeneratedObject> generate_object_specs(const GenInput& in);
+GenerationResult generate(const GenerationInput& in);

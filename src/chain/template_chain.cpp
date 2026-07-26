@@ -1,5 +1,4 @@
 #include "chain/template_chain.h"
-#include "ui/effect_chain_editor.h"
 #include "effect/effect_dict.h"
 
 std::string extract_template_chain(const std::string& alias) {

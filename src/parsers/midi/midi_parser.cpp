@@ -1,4 +1,6 @@
 #include "midi_parser.h"
+#include "host/host_context.h"
+#include "codec/codec.h"
 #include <fstream>
 #include <vector>
 #include <cstdint>

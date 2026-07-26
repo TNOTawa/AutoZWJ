@@ -1,5 +1,5 @@
 #pragma once
-#include "plugin.h"
+#include "core/effect_model.h"
 #include <vector>
 #include <map>
 #include <string>

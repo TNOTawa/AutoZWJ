@@ -1,4 +1,4 @@
-#include "plugin.h"
+﻿#include "plugin.h"
 #include "i18n/i18n.h"
 #include "config2.h"
 #include "parsers/rpp/rpp_parser.h"
@@ -20,12 +20,8 @@
 #include <format>
 #include <unordered_set>
 
-ProjectState g_project_state;
-SceneInfo g_scene_info;
-EDIT_HANDLE* g_edit_handle = nullptr;
-LOG_HANDLE* g_logger = nullptr;
-HINSTANCE g_dll_hinst = nullptr;
-std::vector<TemplateEntry> g_template_pool;
+AppState g_app;
+HostContext g_host;
 
 static uint32_t hash_string(const std::string& s) {
     uint32_t h = 5381;
@@ -33,17 +29,6 @@ static uint32_t hash_string(const std::string& s) {
         h = ((h << 5) + h) + static_cast<unsigned char>(c);
     }
     return h;
-}
-
-static std::vector<int> generate_shuffled_order(int pool_size, uint32_t seed) {
-    std::vector<int> order(pool_size);
-    for (int i = 0; i < pool_size; i++) order[i] = i;
-    for (int i = pool_size - 1; i > 0; i--) {
-        seed = seed * 1103515245u + 12345u;
-        int j = static_cast<int>(seed % static_cast<uint32_t>(i + 1));
-        std::swap(order[i], order[j]);
-    }
-    return order;
 }
 
 COMMON_PLUGIN_TABLE common_plugin_table = {
@@ -60,7 +45,7 @@ EXTERN_C __declspec(dllexport) DWORD RequiredVersion() {
 }
 
 EXTERN_C __declspec(dllexport) void InitializeLogger(LOG_HANDLE* handle) {
-    g_logger = handle;
+    g_host.logger = handle;
 }
 
 static CONFIG_HANDLE* g_config_handle = nullptr;
@@ -134,114 +119,121 @@ EXTERN_C __declspec(dllexport) void UninitializePlugin() {
 static void update_scene_from_edit(EDIT_SECTION* edit) {
     if (!edit || !edit->info) return;
     auto& info = *edit->info;
-    g_scene_info.width = info.width;
-    g_scene_info.height = info.height;
-    g_scene_info.rate = info.rate;
-    g_scene_info.scale = info.scale;
-    g_scene_info.sample_rate = info.sample_rate;
-    g_scene_info.frame = info.frame;
-    g_scene_info.layer = info.layer;
-    g_scene_info.valid = true;
-    g_project_state.config.fps_num = info.rate;
-    g_project_state.config.fps_den = info.scale;
+    g_app.scene.width = info.width;
+    g_app.scene.height = info.height;
+    g_app.scene.rate = info.rate;
+    g_app.scene.scale = info.scale;
+    g_app.scene.sample_rate = info.sample_rate;
+    g_app.scene.frame = info.frame;
+    g_app.scene.layer = info.layer;
+    g_app.scene.valid = true;
+    g_app.project.config.fps_num = info.rate;
+    g_app.project.config.fps_den = info.scale;
 }
 
 struct GenCallState {
-    std::vector<int> shuffled_order;
-    uint32_t seed_base;
+    uint32_t seed;
 };
 
 static void gen_edit_callback(void* param, EDIT_SECTION* edit) {
     auto* cs = static_cast<GenCallState*>(param);
     update_scene_from_edit(edit);
 
-    GenInput in;
-    in.objdict = &g_project_state.objdict;
-    in.tracks = &g_project_state.tracks;
-    in.config = &g_project_state.config;
-    in.template_pool = g_template_pool;
-    in.bakes_per_tpl = &g_param_bakes_per_tpl;
-    in.presets_per_tpl = &g_template_presets_per_tpl;
-    in.scene = g_scene_info;
-    in.base_layer = g_project_state.template_layer + 1;
-    in.seed_base = cs->seed_base;
-    in.shuffled_order = std::move(cs->shuffled_order);
-    in.logger = g_logger;
+    GenerationInput in{
+        g_app.project.objdict,
+        g_app.project.tracks,
+        g_app.project.config,
+        g_app.templates,
+        g_app.scene,
+        g_app.project.template_layer + 1,
+        cs->seed
+    };
 
-    auto specs = generate_object_specs(in);
+    auto result = generate(in);
 
-    for (auto& s : specs) {
+    for (auto& s : result.objects) {
         auto obj = edit->create_object_from_alias(s.alias_chain.c_str(), s.layer, s.sf, s.ef - s.sf);
-        if (obj) edit->set_object_name(obj, s.name.c_str());
+        if (obj) {
+            std::wstring nm;
+            switch (s.name_kind) {
+                case ObjNameKind::FilePath:
+                    nm = utf8_to_wide(s.name_text);
+                    break;
+                case ObjNameKind::Gap:
+                    nm = utf8_to_wide(tr_str(u8"Gap")) + L" " + std::to_wstring(s.name_index);
+                    break;
+                case ObjNameKind::Item:
+                    nm = utf8_to_wide(tr_str(u8"Item")) + L" " + std::to_wstring(s.name_index);
+                    break;
+            }
+            edit->set_object_name(obj, nm.c_str());
+        }
     }
 
-    if (g_logger)
-        g_logger->log(g_logger, utf8_to_wide(tr_fmt(u8"已生成 {} 个物件", specs.size())).c_str());
+    for (const auto& w : result.warnings) {
+        if (g_host.logger)
+            g_host.logger->warn(g_host.logger, utf8_to_wide(w).c_str());
+    }
+
+    if (g_host.logger)
+        g_host.logger->log(g_host.logger, utf8_to_wide(tr_fmt(u8"已生成 {} 个物件", result.objects.size())).c_str());
 
     delete cs;
 }
 
 static void on_generate_from_imgui() {
-    if (!g_project_state.has_data) {
-        if (g_logger) g_logger->warn(g_logger, utf8_to_wide(tr_str(u8"未加载音频工程")).c_str());
+    if (!g_app.project.has_data) {
+        if (g_host.logger) g_host.logger->warn(g_host.logger, utf8_to_wide(tr_str(u8"未加载音频工程")).c_str());
         return;
     }
-    if (g_template_pool.empty()) {
-        if (g_logger) g_logger->error(g_logger, utf8_to_wide(tr_str(u8"未设置模板，请右键已选物件 → 配置导入... 重新打开")).c_str());
+    if (g_app.templates.empty()) {
+        if (g_host.logger) g_host.logger->error(g_host.logger, utf8_to_wide(tr_str(u8"未设置模板，请右键已选物件 → 配置导入... 重新打开")).c_str());
         return;
     }
 
     save_current_template_data();
 
-    uint32_t seed_base = 0;
-    if (!g_project_state.file_path.empty()) {
-        seed_base = hash_string(wide_to_utf8(g_project_state.file_path));
+    uint32_t seed = 0;
+    if (!g_app.project.file_path.empty()) {
+        seed = hash_string(wide_to_utf8(g_app.project.file_path));
     }
 
-    std::vector<int> shuffled_order;
-    if (g_project_state.config.mapping_strategy == 1 &&
-        g_project_state.config.mapping_sequential_order == 2 &&
-        g_template_pool.size() > 1) {
-        shuffled_order = generate_shuffled_order(static_cast<int>(g_template_pool.size()), seed_base);
-    }
-
-    auto* cs = new GenCallState{std::move(shuffled_order), seed_base};
-    g_edit_handle->call_edit_section_param(cs, gen_edit_callback);
+    auto* cs = new GenCallState{seed};
+    g_host.edit_handle->call_edit_section_param(cs, gen_edit_callback);
 }
 
 static void on_select_project(EDIT_SECTION* edit) {
     update_scene_from_edit(edit);
-    load_project_state_from_project_file(edit);
-    flush_project_file_state(edit);
+    load_project_state_from_project_file(edit, g_app, g_host);
+    flush_project_file_state(edit, g_app, g_host);
     imgui_window_show_import_page();
 }
 
 static void on_open_config(EDIT_SECTION* edit) {
     update_scene_from_edit(edit);
-    load_project_state_from_project_file(edit);
+    load_project_state_from_project_file(edit, g_app, g_host);
 
-    if (!g_project_state.has_data) {
+    if (!g_app.project.has_data) {
         std::wstring path_to_load;
-        if (!g_project_state.file_path.empty()) {
-            path_to_load = g_project_state.file_path;
-        } else if (!g_project_state.file_history.empty()) {
-            path_to_load = g_project_state.file_history[0].path;
+        if (!g_app.project.file_path.empty()) {
+            path_to_load = g_app.project.file_path;
+        } else if (!g_app.project.file_history.empty()) {
+            path_to_load = g_app.project.file_history[0].path;
         }
         if (!path_to_load.empty()) {
-            parse_project_file(path_to_load);
+            select_project(g_app, path_to_load);
         }
     }
 
-    flush_project_file_state(edit);
+    flush_project_file_state(edit, g_app, g_host);
 
     int sel_num = edit->get_selected_object_num();
     if (sel_num <= 0) {
-        if (g_logger) g_logger->error(g_logger, utf8_to_wide(tr_str(u8"请先在时间轴上选择一个物件作为模板，再右键打开配置")).c_str());
+        if (g_host.logger) g_host.logger->error(g_host.logger, utf8_to_wide(tr_str(u8"请先在时间轴上选择一个物件作为模板，再右键打开配置")).c_str());
         return;
     }
 
-    g_template_pool.clear();
-    g_template_aliases.clear();
+    g_app.templates.clear();
 
     for (int i = 0; i < sel_num; i++) {
         auto obj = edit->get_selected_object(i);
@@ -267,44 +259,33 @@ static void on_open_config(EDIT_SECTION* edit) {
             entry.display_name = tr_str(u8"模板") + std::to_string(i + 1);
         }
 
-        g_template_pool.push_back(entry);
-        g_template_aliases.push_back(entry.alias);
+        g_app.templates.push_back({std::move(entry), {}, {}, {}});
     }
 
-    if (g_template_pool.empty()) {
-        if (g_logger) g_logger->error(g_logger, utf8_to_wide(tr_str(u8"无法读取任何选中物件的数据")).c_str());
+    if (g_app.templates.empty()) {
+        if (g_host.logger) g_host.logger->error(g_host.logger, utf8_to_wide(tr_str(u8"无法读取任何选中物件的数据")).c_str());
         return;
     }
 
-    std::sort(g_template_pool.begin(), g_template_pool.end(), [](const TemplateEntry& a, const TemplateEntry& b) {
-        if (a.layer != b.layer) return a.layer < b.layer;
-        return a.sf < b.sf;
+    std::sort(g_app.templates.begin(), g_app.templates.end(), [](const TemplateSession& a, const TemplateSession& b) {
+        if (a.source.layer != b.source.layer) return a.source.layer < b.source.layer;
+        return a.source.sf < b.source.sf;
     });
 
-    g_template_aliases.clear();
-    for (auto& tpl : g_template_pool) {
-        g_template_aliases.push_back(tpl.alias);
-    }
-
-    g_project_state.template_alias = g_template_pool[0].alias;
-    g_project_state.template_layer = g_template_pool[0].layer;
-    g_current_template_idx = 0;
+    g_app.project.template_alias = g_app.templates[0].source.alias;
+    g_app.project.template_layer = g_app.templates[0].source.layer;
+    g_app.current_template_index = 0;
 
     // 同步模式"拉伸到固定值"的默认帧数取主模板物件本身的时长（帧）。
     // SDK 的 start/end 均为 0-based 且 end 为末帧（含），故帧数 = end - start + 1；
     // 取值异常（<=0）时不修改，保持 OutputConfig 初值 30 作为兜底。
     {
-        const auto& primary = g_template_pool[0];
+        const auto& primary = g_app.templates[0].source;
         int tpl_duration = primary.ef - static_cast<int>(primary.sf) + 1;
         if (tpl_duration > 0) {
-            g_project_state.config.fixed_duration_frames = tpl_duration;
+            g_app.project.config.fixed_duration_frames = tpl_duration;
         }
     }
-
-    int pool_size = static_cast<int>(g_template_pool.size());
-    g_template_effects_per_tpl.assign(pool_size, {});
-    g_param_bakes_per_tpl.assign(pool_size, {});
-    g_template_presets_per_tpl.assign(pool_size, {});
 
     g_param_bakes.clear();
     g_presets.clear();
@@ -313,7 +294,7 @@ static void on_open_config(EDIT_SECTION* edit) {
     refresh_template_effects();
     sync_presets_from_config();
 
-    if (!g_project_state.has_data) {
+    if (!g_app.project.has_data) {
         imgui_window_show_import_page();
         return;
     }
@@ -322,32 +303,32 @@ static void on_open_config(EDIT_SECTION* edit) {
 
 static void on_file_drop(EDIT_SECTION* edit, LPCWSTR file) {
     update_scene_from_edit(edit);
-    load_project_state_from_project_file(edit);
-    if (parse_project_file(file)) {
-        flush_project_file_state(edit);
-        if (g_logger)
-            g_logger->log(g_logger, (L"AutoZWJ: " + get_project_summary()).c_str());
+    load_project_state_from_project_file(edit, g_app, g_host);
+    if (select_project(g_app, file)) {
+        flush_project_file_state(edit, g_app, g_host);
+        if (g_host.logger)
+            g_host.logger->log(g_host.logger, (L"AutoZWJ: " + get_project_summary(g_app)).c_str());
     }
 }
 
 void sync_scene_info() {
-    if (!g_edit_handle) return;
+    if (!g_host.edit_handle) return;
     EDIT_INFO info = {};
-    g_edit_handle->get_edit_info(&info, sizeof(info));
-    g_scene_info.width = info.width;
-    g_scene_info.height = info.height;
-    g_scene_info.rate = info.rate;
-    g_scene_info.scale = info.scale;
-    g_scene_info.sample_rate = info.sample_rate;
-    g_scene_info.frame = info.frame;
-    g_scene_info.layer = info.layer;
-    g_scene_info.valid = true;
-    g_project_state.config.fps_num = info.rate;
-    g_project_state.config.fps_den = info.scale;
+    g_host.edit_handle->get_edit_info(&info, sizeof(info));
+    g_app.scene.width = info.width;
+    g_app.scene.height = info.height;
+    g_app.scene.rate = info.rate;
+    g_app.scene.scale = info.scale;
+    g_app.scene.sample_rate = info.sample_rate;
+    g_app.scene.frame = info.frame;
+    g_app.scene.layer = info.layer;
+    g_app.scene.valid = true;
+    g_app.project.config.fps_num = info.rate;
+    g_app.project.config.fps_den = info.scale;
 }
 
 EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
-    g_dll_hinst = GetModuleHandle(nullptr);
+    g_host.dll_hinst = GetModuleHandle(nullptr);
 
     static std::wstring s_menu_select = utf8_to_wide(tr_str(u8"选择音频工程..."));
     static std::wstring s_menu_config = utf8_to_wide(tr_str(u8"配置导入..."));
@@ -355,11 +336,11 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     host->register_object_menu(s_menu_config.c_str(), on_open_config);
     host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI Input", L"*.rpp;*.mid", on_file_drop);
 
-    g_edit_handle = host->create_edit_handle();
+    g_host.edit_handle = host->create_edit_handle();
 
-    HWND host_wnd = g_edit_handle->get_host_app_window();
-    imgui_window_init(g_dll_hinst, host_wnd);
+    HWND host_wnd = g_host.edit_handle->get_host_app_window();
+    imgui_window_init(g_host.dll_hinst, host_wnd);
     imgui_window_set_generate_callback(on_generate_from_imgui);
 
-    if (g_logger) g_logger->log(g_logger, L"AutoZWJ plugin registered");
+    if (g_host.logger) g_host.logger->log(g_host.logger, L"AutoZWJ plugin registered");
 }

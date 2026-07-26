@@ -1,4 +1,4 @@
-#include "effect_chain_editor.h"
+﻿#include "effect_chain_editor.h"
 #include "i18n/i18n.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -14,14 +14,12 @@
 #include <unordered_map>
 
 bool g_show_effect_editor = false;
-int g_current_template_idx = 0;
 std::vector<ParsedEffect> g_template_effects;
 std::vector<ParamBake> g_param_bakes;
 std::vector<PresetEntry> g_presets;
 std::string g_highlight_param_id;
 int g_highlight_timer = 0;
 
-std::vector<std::string> g_template_aliases;
 bool g_template_effects_dirty = true;
 
 static bool GhostSmallButton(const char* label) {
@@ -35,9 +33,6 @@ static bool GhostSmallButton(const char* label) {
     return ret;
 }
 
-std::vector<std::vector<ParsedEffect>> g_template_effects_per_tpl;
-std::vector<std::vector<ParamBake>> g_param_bakes_per_tpl;
-std::vector<std::vector<PresetEntry>> g_template_presets_per_tpl;
 
 static bool is_known_expr_function(const std::string& s) {
     size_t p = s.find('(');
@@ -82,30 +77,20 @@ static std::unordered_map<std::string, float> s_input_anim_widths;
 static std::unordered_map<std::string, float> s_input_anim_heights;
 
 void save_current_template_data() {
-    if (g_current_template_idx < 0 || g_current_template_idx >= (int)g_template_pool.size()) return;
-    if ((int)g_template_effects_per_tpl.size() < (int)g_template_pool.size()) {
-        g_template_effects_per_tpl.resize(g_template_pool.size());
-        g_param_bakes_per_tpl.resize(g_template_pool.size());
-        g_template_presets_per_tpl.resize(g_template_pool.size());
-    }
+    if (g_app.current_template_index < 0 || g_app.current_template_index >= (int)g_app.templates.size()) return;
     for (auto& pb : g_param_bakes) {
         pb.value_mode = detect_mode_from_text(pb.param_value);
     }
-    g_template_effects_per_tpl[g_current_template_idx] = g_template_effects;
-    g_param_bakes_per_tpl[g_current_template_idx] = g_param_bakes;
-    g_template_presets_per_tpl[g_current_template_idx] = g_presets;
+    g_app.templates[g_app.current_template_index].effects = g_template_effects;
+    g_app.templates[g_app.current_template_index].bakes = g_param_bakes;
+    g_app.templates[g_app.current_template_index].presets = g_presets;
 }
 
 void load_template_data(int idx) {
-    if (idx < 0 || idx >= (int)g_template_pool.size()) return;
-    if ((int)g_template_effects_per_tpl.size() < (int)g_template_pool.size()) {
-        g_template_effects_per_tpl.resize(g_template_pool.size());
-        g_param_bakes_per_tpl.resize(g_template_pool.size());
-        g_template_presets_per_tpl.resize(g_template_pool.size());
-    }
-    g_template_effects = g_template_effects_per_tpl[idx];
-    g_param_bakes = g_param_bakes_per_tpl[idx];
-    g_presets = g_template_presets_per_tpl[idx];
+    if (idx < 0 || idx >= (int)g_app.templates.size()) return;
+    g_template_effects = g_app.templates[idx].effects;
+    g_param_bakes = g_app.templates[idx].bakes;
+    g_presets = g_app.templates[idx].presets;
 }
 
 void refresh_template_effects() {
@@ -113,17 +98,17 @@ void refresh_template_effects() {
     g_template_effects.clear();
     s_header_states.clear();
 
-    if (g_current_template_idx < 0 || g_current_template_idx >= (int)g_template_aliases.size())
+    if (g_app.current_template_index < 0 || g_app.current_template_index >= (int)g_app.templates.size())
         return;
 
-    std::string chain = extract_template_chain(g_template_aliases[g_current_template_idx]);
+    std::string chain = extract_template_chain(g_app.templates[g_app.current_template_index].source.alias);
     if (chain.empty()) return;
 
     g_template_effects = parse_effect_chain(chain);
 }
 
 void sync_presets_from_config() {
-    OutputConfig& cfg = g_project_state.config;
+    OutputConfig& cfg = g_app.project.config;
 
     std::map<std::string, int> saved_positions;
     for (const auto& p : g_presets) {
@@ -423,13 +408,13 @@ static float calculate_line_y(float mouse_y, const std::vector<ItemRect>& rects)
 void render_effect_chain_panel() {
     if (g_highlight_timer > 0) g_highlight_timer--;
 
-    if (g_template_aliases.empty()) {
+    if (g_app.templates.empty()) {
         ImGui::TextDisabled("%s", tr(u8"未选择模板物件"));
         return;
     }
 
     // 懒加载：需要刷新时解析模板
-    if (g_template_effects_dirty && !g_template_aliases.empty()) {
+    if (g_template_effects_dirty && !g_app.templates.empty()) {
         refresh_template_effects();
     }
 
@@ -440,18 +425,18 @@ void render_effect_chain_panel() {
 
     // ---- TabBar（多模板时显示） ----
     bool template_changed = false;
-    int prev_template_idx = g_current_template_idx;
-    if (g_template_aliases.size() > 1) {
+    int prev_template_idx = g_app.current_template_index;
+    if (g_app.templates.size() > 1) {
         if (ImGui::BeginTabBar("Templates")) {
-            for (int i = 0; i < (int)g_template_aliases.size(); i++) {
+            for (int i = 0; i < (int)g_app.templates.size(); i++) {
                 std::string label = tr_str(u8"模板") + std::to_string(i + 1);
-                if (i < (int)g_template_pool.size() && !g_template_pool[i].display_name.empty()) {
-                    label = g_template_pool[i].display_name;
+                if (i < (int)g_app.templates.size() && !g_app.templates[i].source.display_name.empty()) {
+                    label = g_app.templates[i].source.display_name;
                     if (label.size() > 16) label = label.substr(0, 13) + "...";
                 }
                 if (ImGui::BeginTabItem(label.c_str())) {
-                    if (g_current_template_idx != i) {
-                        g_current_template_idx = i;
+                    if (g_app.current_template_index != i) {
+                        g_app.current_template_index = i;
                         template_changed = true;
                     }
                     ImGui::EndTabItem();
@@ -461,15 +446,15 @@ void render_effect_chain_panel() {
         }
     }
     if (template_changed) {
-        int new_idx = g_current_template_idx;
-        g_current_template_idx = prev_template_idx;
+        int new_idx = g_app.current_template_index;
+        g_app.current_template_index = prev_template_idx;
         save_current_template_data();
-        g_current_template_idx = new_idx;
+        g_app.current_template_index = new_idx;
         s_header_states.clear();
-        if (g_current_template_idx >= 0 && g_current_template_idx < (int)g_template_aliases.size()) {
-            g_project_state.template_alias = g_template_aliases[g_current_template_idx];
+        if (g_app.current_template_index >= 0 && g_app.current_template_index < (int)g_app.templates.size()) {
+            g_app.project.template_alias = g_app.templates[g_app.current_template_index].source.alias;
         }
-        load_template_data(g_current_template_idx);
+        load_template_data(g_app.current_template_index);
         refresh_template_effects();
     }
 

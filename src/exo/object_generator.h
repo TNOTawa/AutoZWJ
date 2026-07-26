@@ -1,5 +1,6 @@
 #pragma once
-#include "plugin.h"
+#include "core/project_model.h"
+#include "core/output_config.h"
 #include <string>
 #include <vector>
 
