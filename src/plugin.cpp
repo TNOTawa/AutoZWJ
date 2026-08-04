@@ -108,6 +108,7 @@ EXTERN_C __declspec(dllexport) void InitializeConfig(CONFIG_HANDLE* config) {
 }
 
 EXTERN_C __declspec(dllexport) bool InitializePlugin(DWORD version) {
+    (void)version;
     i18n_init();
     return true;
 }

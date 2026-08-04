@@ -60,15 +60,6 @@ static int detect_mode_from_text(const std::string& s) {
     return 2;
 }
 
-static const char* get_mode_label(int mode) {
-    switch (mode) {
-        case 0: return tr(u8"[固]");
-        case 1: return tr(u8"[变]");
-        case 2: return tr(u8"[表]");
-        default: return "";
-    }
-}
-
 // ---- 静态状态（持久到会话结束） ----
 static std::vector<bool> s_header_states;
 
@@ -289,12 +280,6 @@ static void render_var_picker_button(const char* id, std::string& target_value) 
         var_item("round(x)",           "round(x)");
         ImGui::EndPopup();
     }
-}
-
-static bool is_input_focused(const std::string& anim_key, float normal_w) {
-    auto it = s_input_anim_widths.find(anim_key);
-    if (it == s_input_anim_widths.end()) return false;
-    return it->second > normal_w + 8.0f;
 }
 
 static void render_bake_input(const std::string& label, std::string& value,
@@ -634,7 +619,6 @@ void render_effect_chain_panel() {
                         if (w <= max_w) return s;
                         std::string r = s;
                         while (!r.empty()) {
-                            unsigned char c = r.back();
                             r.pop_back();
                             while (!r.empty() && (static_cast<unsigned char>(r.back()) & 0x80) && !(static_cast<unsigned char>(r.back()) & 0x40)) {
                                 r.pop_back();

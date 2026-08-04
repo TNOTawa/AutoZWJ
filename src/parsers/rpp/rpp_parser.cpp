@@ -30,12 +30,6 @@ static bool ends_with_str(const std::string& s, const std::string& suffix) {
            s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-static std::string to_lower(const std::string& s) {
-    std::string r = s;
-    for (auto& c : r) c = (char)std::tolower((unsigned char)c);
-    return r;
-}
-
 static std::vector<std::string> split_line(const std::string& line) {
     std::vector<std::string> parts;
     std::istringstream iss(line);
@@ -380,10 +374,8 @@ bool parse_rpp(const std::string& path, ObjDict& objdict,
                 objdict.loop.back() = 0;
 
                 int sec_count = 1;
-                double last_len = item_length;
 
                 while (sec_length * sec_count - item_length < -0.001 && sec_length > 0.001) {
-                    last_len = sec_length;
                     if (sec_count > 1) {
                         objdict.length.back() = sec_length;
                         objdict.pos.push_back(objdict.pos.back() + sec_length);

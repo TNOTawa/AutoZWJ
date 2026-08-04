@@ -407,6 +407,12 @@ static std::vector<ParamBake> evaluate_bakes_for_item(
     return result;
 }
 
+// GCC 15.x 对 vector::resize 扩容路径内联 _Construct 的 -Warray-bounds 误报
+// （resize(1) 只缩不扩，不可能越界；note 指向 operator new 分配的 8 字节对象）。
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
 static int assign_layer_impl(double obj_fp, double bf, std::vector<double>& target, int strategy) {
     if (strategy == 0) {
         for (size_t k = 0; k < target.size(); k++) {
@@ -432,6 +438,9 @@ static int assign_layer_impl(double obj_fp, double bf, std::vector<double>& targ
     }
     return 0;
 }
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 GenerationResult generate(const GenerationInput& in) {
     std::vector<GeneratedObject> specs;
@@ -584,7 +593,6 @@ GenerationResult generate(const GenerationInput& in) {
                             int gap_sf = intervals[g].ef + 1;
                             int gap_ef = intervals[g + 1].sf - 1;
                             if (gap_ef >= gap_sf) {
-                                double gap_fp = gap_sf;
                                 int gap_ef_final;
                                 if (config.sync_mode == 4) {
                                     gap_ef_final = gap_sf + config.fixed_duration_frames - 1;
