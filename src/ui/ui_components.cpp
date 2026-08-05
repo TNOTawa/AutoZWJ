@@ -280,13 +280,6 @@ void render_nav_bar() {
 
     // 左侧：文件
     if (ImGui::BeginMenu(tr(u8"文件"))) {
-        if (ImGui::MenuItem(tr(u8"工程导入页面"))) {
-            g_current_page = AppPage::Import;
-        }
-        if (ImGui::MenuItem(tr(u8"配置导入页面"))) {
-            g_current_page = AppPage::Config;
-        }
-        ImGui::Separator();
         if (ImGui::MenuItem(tr(u8"首选项..."))) {
             // 不能在菜单内直接 OpenPopup（ID 上下文与菜单关闭连带问题），
             // 须在菜单外延迟打开（同 BPM 提示/功能开关页面）
@@ -371,6 +364,22 @@ void render_nav_bar() {
     }
     if (ImGui::BeginPopupModal(tr(u8"BPM网格提示"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("%s", tr(u8"请先导入工程文件"));
+        if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // 首选项弹窗
+    if (g_show_preferences) {
+        g_show_preferences = false;
+        ImGui::OpenPopup("##preferences");
+    }
+    if (ImGui::BeginPopupModal("##preferences", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("%s", tr(u8"首选项"));
+        ImGui::Separator();
+        ImGui::TextDisabled("%s", tr(u8"宿主菜单需重启 AviUtl2 生效"));
+        ImGui::Spacing();
         if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
             ImGui::CloseCurrentPopup();
         }
@@ -477,24 +486,6 @@ void render_import_page() {
     ImGui::Spacing();
     ImGui::Separator();
 
-    ImGui::Text("%s", tr(u8"导入选项"));
-    ImGui::Separator();
-    if (ImGui::InputDouble(tr(u8"基准时间（秒）"), &g_app.project.config.base_time_sec, 0.1, 1.0, "%.1f")) {
-        update_current_project_offset(g_app, g_app.project.config.base_time_sec);
-    }
-
-    ImGui::Spacing();
-    if (ImGui::Button(tr(u8"应用BPM网格到时间轴"), ImVec2(200, 0))) {
-        if (g_app.project.has_data) {
-            apply_bpm_grid();
-        } else {
-            g_show_no_project_popup = true;
-        }
-    }
-
-    ImGui::Spacing();
-    ImGui::Separator();
-
     // --- 轨道树（可滚动区域，留空间给底部按钮）---
     float button_height = 45.0f;
     float avail_h = ImGui::GetContentRegionAvail().y - button_height - ImGui::GetStyle().ItemSpacing.y;
@@ -503,32 +494,34 @@ void render_import_page() {
     render_track_tree(true);
     ImGui::EndChild();
 
-    // --- 底部固定确认导入按钮 ---
+    // --- 底部固定按钮区：确认导入 / 取消 ---
     if (ImGui::Button(tr(u8"确认导入"), ImVec2(140, 35))) {
         if (g_app.project.has_data) {
-            if (!g_app.project.template_alias.empty()) {
-                if (g_app.templates.empty()) {
-                    TemplateEntry te;
-                    te.alias = g_app.project.template_alias;
-                    te.chain = extract_template_chain(te.alias);
-                    g_app.templates.push_back({std::move(te), {}, {}, {}});
-                    refresh_template_effects();
-                }
-                g_current_page = AppPage::Config;
-            } else {
-                ImGui::OpenPopup(tr(u8"提示"));
+            // 恢复上次使用的模板（如有），无条件进入配置页；无模板时由配置页横幅引导
+            if (!g_app.project.template_alias.empty() && g_app.templates.empty()) {
+                TemplateEntry te;
+                te.alias = g_app.project.template_alias;
+                te.chain = extract_template_chain(te.alias);
+                g_app.templates.push_back({std::move(te), {}, {}, {}});
+                refresh_template_effects();
             }
+            g_current_page = AppPage::Config;
         } else {
             ImGui::OpenPopup(tr(u8"提示"));
         }
     }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(u8"取消"), ImVec2(100, 35))) {
+        // 误触进入导入页的退出通道：有工程回配置页，无工程关闭窗口
+        if (g_app.project.has_data) {
+            g_current_page = AppPage::Config;
+        } else {
+            imgui_window_hide();
+        }
+    }
 
     if (ImGui::BeginPopupModal(tr(u8"提示"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        if (!g_app.project.has_data) {
-            ImGui::Text("%s", tr(u8"请先选择一个工程文件"));
-        } else {
-            ImGui::Text("%s", tr(u8"工程已导入，但尚未选择模板物件。\n请右键时间轴物件选择配置导入"));
-        }
+        ImGui::Text("%s", tr(u8"请先选择一个工程文件"));
         if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
             ImGui::CloseCurrentPopup();
         }
@@ -537,7 +530,7 @@ void render_import_page() {
 }
 
 // ---------------------------------------------------------------------------
-// 配置导入页面（原主页面）
+// 配置导入页面（主页面）
 // ---------------------------------------------------------------------------
 static void render_header_panel() {
     std::string preview;
@@ -577,20 +570,11 @@ static void render_header_panel() {
             if (ImGui::BeginPopupContextItem()) {
                 if (ImGui::MenuItem(tr(u8"删除记录"))) {
                     remove_file_from_history(g_app, i);
+                    ImGui::CloseCurrentPopup();
+                    i--;   // 删除后回退索引，避免列表跳过下一项
                 }
-        ImGui::EndPopup();
-    }
-
-    if (ImGui::BeginPopupModal("##preferences", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("%s", tr(u8"首选项"));
-        ImGui::Separator();
-        ImGui::TextDisabled("%s", tr(u8"宿主菜单需重启 AviUtl2 生效"));
-        ImGui::Spacing();
-        if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
+                ImGui::EndPopup();
+            }
             if (is_selected) {
                 ImGui::SetItemDefaultFocus();
             }
@@ -602,19 +586,23 @@ static void render_header_panel() {
     if (!stats.empty()) {
         ImGui::SameLine();
         ImGui::TextDisabled("| %s", stats.c_str());
-    } else if (!g_app.project.has_data && !g_app.project.file_history.empty()) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("%s", tr(u8"(从下拉框选择历史工程，或导入新工程)"));
     } else if (!g_app.project.has_data) {
         ImGui::SameLine();
-        ImGui::TextColored(UI::COL_HINT_TEXT,
-            tr(u8"（文件 \u2192 工程导入页面）"));
+        ImGui::TextDisabled("%s", tr(u8"(从下拉框选择历史工程，或导入新工程)"));
     }
 }
 
 void render_config_page() {
     render_header_panel();
     ImGui::Separator();
+
+    // 无模板引导横幅：未选择模板物件时提示下一步操作，生成按钮由 render_action_bar 禁用
+    if (g_app.project.has_data && g_app.templates.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, UI::COL_WARNING_TEXT);
+        ImGui::Text("%s", tr(u8"未选择模板物件：请在时间轴右键任意物件 → 配置导入..."));
+        ImGui::PopStyleColor();
+        ImGui::Separator();
+    }
 
     float avail_h = ImGui::GetContentRegionAvail().y - 50;
     float avail_w = ImGui::GetContentRegionAvail().x;
@@ -688,6 +676,13 @@ void render_config_panel() {
     if (g_app.scene.valid) {
         cfg.fps_num = info.rate;
         cfg.fps_den = info.scale;
+    }
+
+    ImGui::Spacing();
+    ImGui::Text("%s", tr(u8"导入设置"));
+    ImGui::Separator();
+    if (ImGui::InputDouble(tr(u8"基准时间（秒）"), &cfg.base_time_sec, 0.1, 1.0, "%.1f")) {
+        update_current_project_offset(g_app, cfg.base_time_sec);
     }
 
     ImGui::Spacing();
@@ -833,6 +828,10 @@ void render_action_bar() {
     float right_x = ImGui::GetContentRegionAvail().x - 110 - 110 - ImGui::GetStyle().ItemSpacing.x;
     ImGui::SameLine(right_x);
 
+    // 无工程或无模板时禁用生成（on_generate_from_imgui 内部检查保留作双保险）
+    bool can_generate = g_app.project.has_data && !g_app.templates.empty();
+    ImGui::BeginDisabled(!can_generate);
+
     if (ImGui::Button(tr(u8"应用"), ImVec2(110, 30))) {
         if (g_app.project.has_data)
             imgui_window_trigger_generate();
@@ -844,4 +843,6 @@ void render_action_bar() {
             imgui_window_hide();
         }
     }
+
+    ImGui::EndDisabled();
 }

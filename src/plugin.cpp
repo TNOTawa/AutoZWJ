@@ -208,13 +208,6 @@ static void on_generate_from_imgui() {
     g_host.edit_handle->call_edit_section_param(cs, gen_edit_callback);
 }
 
-static void on_select_project(EDIT_SECTION* edit) {
-    update_scene_from_edit(edit);
-    load_project_state_from_project_file(edit, g_app, g_host);
-    flush_project_file_state(edit, g_app, g_host);
-    imgui_window_show_import_page();
-}
-
 static void on_open_config(EDIT_SECTION* edit) {
     update_scene_from_edit(edit);
     load_project_state_from_project_file(edit, g_app, g_host);
@@ -235,7 +228,12 @@ static void on_open_config(EDIT_SECTION* edit) {
 
     int sel_num = edit->get_selected_object_num();
     if (sel_num <= 0) {
-        if (g_host.logger) g_host.logger->error(g_host.logger, utf8_to_wide(tr_str(u8"请先在时间轴上选择一个物件作为模板，再右键打开配置")).c_str());
+        // 无模板也打开面板：无工程先进导入页，有工程进配置页由横幅引导
+        if (g_app.project.has_data) {
+            imgui_window_show();
+        } else {
+            imgui_window_show_import_page();
+        }
         return;
     }
 
@@ -314,6 +312,7 @@ static void on_file_drop(EDIT_SECTION* edit, LPCWSTR file) {
         flush_project_file_state(edit, g_app, g_host);
         if (g_host.logger)
             g_host.logger->log(g_host.logger, (L"AutoZWJ: " + get_project_summary(g_app)).c_str());
+        imgui_window_show();
     }
 }
 
@@ -336,9 +335,7 @@ void sync_scene_info() {
 EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     g_host.dll_hinst = GetModuleHandle(nullptr);
 
-    static std::wstring s_menu_select = utf8_to_wide(tr_str(u8"选择音频工程..."));
     static std::wstring s_menu_config = utf8_to_wide(tr_str(u8"配置导入..."));
-    host->register_layer_menu(s_menu_select.c_str(), on_select_project);
     host->register_object_menu(s_menu_config.c_str(), on_open_config);
     host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI Input", L"*.rpp;*.mid", on_file_drop);
     up_register_menu(host);
