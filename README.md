@@ -51,11 +51,13 @@ cmake --build build
 
 ## 参考
 
+- [AviUtl2 / AviUtl ExEdit2 Plugin SDK](https://spring-fragrance.mints.ne.jp/aviutl/)
+- [Dear ImGui](https://github.com/ocornut/imgui)
 - [RPPtoEXO ver2.0](https://github.com/Garech-mas/RPPtoEXO-ver2.0)
 - [OtomadHelper](https://github.com/otomad/OtomadHelper)
 - [om_midi](https://github.com/otomad/om_midi)
-- [AviUtl2 / AviUtl ExEdit2 Plugin SDK](https://spring-fragrance.mints.ne.jp/aviutl/)
-- [Dear ImGui](https://github.com/ocornut/imgui)
+- [import_midi_tempos.aux2](https://github.com/sevenc-nanashi/import_midi_tempos.aux2)
+- [UltraPaste](https://github.com/zzzzzz9125/UltraPaste)
 
 ## 许可
 

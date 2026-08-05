@@ -8,11 +8,14 @@
 #include "chain/template_chain.h"
 #include "exo/object_generator.h"
 #include "tools/tempo/tempo_apply.h"
+#include "adapters/menu_registry.h"
 #include <algorithm>
 #include <sstream>
 
 AppPage g_current_page = AppPage::Config;
 static bool g_show_no_project_popup = false;
+static bool g_show_feature_switches = false;
+static bool g_show_preferences = false;
 
 // ---------------------------------------------------------------------------
 // 目录持久化
@@ -285,7 +288,9 @@ void render_nav_bar() {
         }
         ImGui::Separator();
         if (ImGui::MenuItem(tr(u8"首选项..."))) {
-            ImGui::OpenPopup(u8"##preferences");
+            // 不能在菜单内直接 OpenPopup（ID 上下文与菜单关闭连带问题），
+            // 须在菜单外延迟打开（同 BPM 提示/功能开关页面）
+            g_show_preferences = true;
         }
         ImGui::EndMenu();
     }
@@ -298,6 +303,12 @@ void render_nav_bar() {
             } else {
                 g_show_no_project_popup = true;
             }
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem(tr(u8"功能开关页面"))) {
+            // 不能在此处直接 OpenPopup：菜单内弹出的 popup 会因 ID 上下文
+            // 与菜单关闭连带问题无法显示，须在菜单外延迟打开（同 BPM 提示）
+            g_show_feature_switches = true;
         }
         ImGui::EndMenu();
     }
@@ -361,6 +372,35 @@ void render_nav_bar() {
     if (ImGui::BeginPopupModal(tr(u8"BPM网格提示"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("%s", tr(u8"请先导入工程文件"));
         if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // 功能开关页面：右键菜单注册项开关（重启 AviUtl2 后生效）
+    if (g_show_feature_switches) {
+        g_show_feature_switches = false;
+        ImGui::OpenPopup(tr(u8"功能开关页面"));
+    }
+    if (ImGui::BeginPopupModal(tr(u8"功能开关页面"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("%s", tr(u8"右键菜单注册项"));
+        ImGui::Separator();
+
+        bool changed = false;
+        for (auto& e : menu_registry_all()) {
+            bool enabled = e.enabled;
+            if (ImGui::Checkbox(tr(e.label_key.c_str()), &enabled)) {
+                e.enabled = enabled;
+                changed = true;
+            }
+        }
+        if (changed) {
+            menu_registry_save();
+        }
+
+        ImGui::Separator();
+        ImGui::TextDisabled("%s", tr(u8"宿主菜单需重启 AviUtl2 生效"));
+        if (ImGui::Button(tr(u8"关闭"), ImVec2(80, 0))) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

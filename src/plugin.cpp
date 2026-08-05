@@ -13,6 +13,8 @@
 #include "chain/template_chain.h"
 #include "generation/generation.h"
 #include "codec/codec.h"
+#include "adapters/menu_registry.h"
+#include "tools/up/up.h"
 #include <algorithm>
 #include <sstream>
 #include <cmath>
@@ -105,6 +107,9 @@ EXTERN_C __declspec(dllexport) void InitializeConfig(CONFIG_HANDLE* config) {
     g_config_handle = config;
     scan_plugin_language_sections();
     i18n_set_host_lang_detector(detect_aviutl2_lang);
+    if (config && config->app_data_path) {
+        menu_registry_load(config->app_data_path);
+    }
 }
 
 EXTERN_C __declspec(dllexport) bool InitializePlugin(DWORD version) {
@@ -336,6 +341,7 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     host->register_layer_menu(s_menu_select.c_str(), on_select_project);
     host->register_object_menu(s_menu_config.c_str(), on_open_config);
     host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI Input", L"*.rpp;*.mid", on_file_drop);
+    up_register_menu(host);
 
     g_host.edit_handle = host->create_edit_handle();
 

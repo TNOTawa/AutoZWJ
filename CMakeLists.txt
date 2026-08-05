@@ -28,6 +28,8 @@ add_library(autozwj_core STATIC
     src/generation/generation.cpp
     src/chain/template_chain.cpp
     src/effect/effect_dict.cpp
+    src/codec/codec.cpp
+    src/tools/up/up_media_parser.cpp
 )
 target_include_directories(autozwj_core PRIVATE
     ${CMAKE_SOURCE_DIR}/src
@@ -51,12 +53,13 @@ target_include_directories(autozwj_ui PRIVATE
 add_library(AutoZWJ SHARED
     src/plugin.cpp
     src/i18n/i18n.cpp
-    src/codec/codec.cpp
     src/exo/object_generator.cpp
     src/parsers/rpp/rpp_parser.cpp
     src/parsers/midi/midi_parser.cpp
     src/parsers/lrc/lrc_parser.cpp
     src/tools/tempo/tempo_apply.cpp
+    src/tools/up/up.cpp
+    src/adapters/menu_registry.cpp
     src/application/import_service.cpp
     src/application/project_controller.cpp
     src/adapters/project_file_store.cpp
@@ -101,4 +104,20 @@ target_include_directories(autozwj_test PRIVATE
 )
 target_link_libraries(autozwj_test PRIVATE
     autozwj_core
+)
+
+# ---- autozwj_test_up: UP 解析器 CLI 测试 ----
+add_executable(autozwj_test_up
+    tests/test_up_parser.cpp
+)
+target_include_directories(autozwj_test_up PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+target_link_libraries(autozwj_test_up PRIVATE
+    autozwj_core
+)
+
+# ---- dump_clipboard: 剪贴板 REAPERMedia 数据导出工具（测试夹具采集用） ----
+add_executable(dump_clipboard
+    tests/fixtures/dump_clipboard.cpp
 )
