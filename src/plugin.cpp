@@ -4,7 +4,6 @@
 #include "core/app_message.h"
 #include "parsers/rpp/rpp_parser.h"
 #include "parsers/midi/midi_parser.h"
-#include "exo/object_generator.h"
 #include "effect/effect_dict.h"
 #include "ui/file_picker.h"
 #include "ui/imgui_window.h"

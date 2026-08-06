@@ -7,7 +7,6 @@
 #include "ui/imgui_window.h"
 #include "ui/effect_chain_editor.h"
 #include "chain/template_chain.h"
-#include "exo/object_generator.h"
 #include "tools/tempo/tempo_apply.h"
 #include "adapters/menu_registry.h"
 #include <algorithm>
@@ -603,6 +602,8 @@ void render_config_page() {
     static float anim_width = 0.0f;
     float target_w = g_show_effect_editor ? (avail_w * 0.34f) : 0.0f;
     anim_width = anim_width + (target_w - anim_width) * 0.15f;
+    const float kMinRemaining = 260.0f;
+    anim_width = std::max(0.0f, std::min(anim_width, std::max(avail_w - kMinRemaining, 0.0f)));
 
     if (anim_width < 1.0f) {
         // === 双列模式 ===
@@ -736,8 +737,6 @@ void render_config_panel() {
     if (flip_highlight) {
         ImGui::PopStyleColor(6);
     }
-    ImGui::Checkbox(tr(u8"无节拍同步"), &cfg.beatless_sync);
-    HelpTooltip(tr(u8"关闭节拍对齐：物件按音符起始帧放置，不吸附 BPM 节拍"));
     ImGui::Checkbox(tr(u8"向上取整帧"), &cfg.use_round_up);
     HelpTooltip(tr(u8"物件帧号计算时向上取整，默认四舍五入"));
 
@@ -774,9 +773,6 @@ void render_config_panel() {
         if (cfg.track_filter_n < 1) cfg.track_filter_n = 1;
         ImGui::Unindent(16);
     }
-
-    // 向后兼容：同步旧 no_gap 字段
-    cfg.no_gap = (cfg.sync_mode == 1);
 
     // Phase 4: 多源映射（仅当模板池 >= 2 时显示）
     if (g_app.templates.size() >= 2) {

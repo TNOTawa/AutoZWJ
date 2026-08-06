@@ -5,7 +5,6 @@
 #include "ui/ui_config.h"
 #include "plugin.h"
 #include "chain/template_chain.h"
-#include "exo/object_generator.h"
 #include "effect/effect_dict.h"
 #include <cstring>
 #include <map>

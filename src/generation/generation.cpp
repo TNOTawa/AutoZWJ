@@ -1,8 +1,12 @@
 #include "generation/generation.h"
-#include "exo/object_generator.h"
 #include "script/expr_evaluator.h"
 #include "script/variable_subst.h"
 #include <algorithm>
+#include <cmath>
+
+static double frame_round(double v, bool use_round_up) {
+    return use_round_up ? std::ceil(v) : std::round(v);
+}
 
 static std::vector<int> generate_shuffled_order(int pool_size, uint32_t seed) {
     std::vector<int> order(pool_size);
@@ -16,7 +20,6 @@ static std::vector<int> generate_shuffled_order(int pool_size, uint32_t seed) {
 }
 
 #include <sstream>
-#include <cmath>
 #include <cstdint>
 #include <format>
 #include <map>
@@ -299,8 +302,8 @@ static std::unordered_map<std::string, double> build_item_vars(
     vars["note.index0"]       = static_cast<double>(item_count_global);
     vars["note.duration"]     = std::round(objdict.length[item_idx] * fps);
     vars["note.duration_sec"] = objdict.length[item_idx];
-    vars["note.start_frame"]  = std::round(interval.pos_sec * fps) + 1.0;
-    vars["note.end_frame"]    = std::round((interval.pos_sec + objdict.length[item_idx]) * fps);
+    vars["note.start_frame"]  = frame_round(interval.obj_fp, config.use_round_up);
+    vars["note.end_frame"]    = frame_round(interval.bf, config.use_round_up);
     vars["note.bpm"]          = objdict.bpm;
 
     double pitch_val = objdict.pitch[item_idx] + 69.0;
@@ -483,10 +486,6 @@ GenerationResult generate(const GenerationInput& in) {
     int bpos_global = 0;
     std::map<int, int> layer_item_counts;
 
-    auto sur_round = [&](double v) -> double {
-        return config.use_round_up ? std::ceil(v) : std::round(v);
-    };
-
     for (size_t ti = 0; ti < tracks.size(); ti++) {
         if (!tracks[ti].selected) {
             while (item_start < objdict.pos.size() && objdict.pos[item_start] != -1.0) item_start++;
@@ -533,19 +532,19 @@ GenerationResult generate(const GenerationInput& in) {
 
                         bool stretch_next = (config.sync_mode == 1);
                         if (stretch_next && next_fp > 0) {
-                            double rounded_bf = sur_round(bf);
-                            double rounded_next = sur_round(next_fp);
+                            double rounded_bf = frame_round(bf, config.use_round_up);
+                            double rounded_next = frame_round(next_fp, config.use_round_up);
                             if (rounded_bf < rounded_next - 1) bf = next_fp - 1;
                         }
 
-                        int sf = (int)sur_round(obj_fp);
+                        int sf = (int)frame_round(obj_fp, config.use_round_up);
                         if (sf < 1) sf = 1;
                         int ef;
                         bool use_fixed = (config.sync_mode == 2 || config.sync_mode == 4);
                         if (use_fixed) {
                             ef = sf + config.fixed_duration_frames - 1;
                         } else {
-                            ef = (int)sur_round(bf);
+                            ef = (int)frame_round(bf, config.use_round_up);
                             if (ef <= sf) ef = sf + 1;
                         }
 

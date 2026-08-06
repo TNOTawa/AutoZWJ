@@ -41,7 +41,6 @@ src/
 ├── codec/codec.h/cpp               # 字符编码转换（utf8/wide/cp932）
 ├── chain/template_chain.h/cpp      # 模板效果链提取与解析
 ├── generation/generation.h/cpp     # 物件生成引擎（纯数据黑盒）
-├── exo/object_generator.h/cpp      # .object alias 生成（旧路径，已停用）
 ├── effect/effect_dict.h/cpp        # ExEdit2 效果参数字典（名称映射）
 ├── script/
 │   ├── expr_evaluator.h            # 递归下降表达式求值器（仅头文件）

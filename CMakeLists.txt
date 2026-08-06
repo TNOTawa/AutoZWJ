@@ -53,7 +53,6 @@ target_include_directories(autozwj_ui PRIVATE
 add_library(AutoZWJ SHARED
     src/plugin.cpp
     src/i18n/i18n.cpp
-    src/exo/object_generator.cpp
     src/parsers/rpp/rpp_parser.cpp
     src/parsers/midi/midi_parser.cpp
     src/parsers/lrc/lrc_parser.cpp
