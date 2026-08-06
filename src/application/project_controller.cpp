@@ -1,16 +1,25 @@
 #include "project_controller.h"
 #include "import_service.h"
+#include "core/app_message.h"
+#include "i18n/i18n.h"
+#include "codec/codec.h"
 #include <algorithm>
 
 bool g_project_state_dirty = false;
 
 bool select_project(AppState& app, const std::wstring& file_path) {
     auto parsed = parse_source(file_path);
-    if (parsed.tracks.empty() && parsed.objdict.pos.empty()) return false;
+    if (parsed.tracks.empty() && parsed.objdict.pos.empty()) {
+        app_msg_set(AppMsgSeverity::Error, tr_str(u8"无法解析该文件，仅支持 .rpp / .mid / .lrc"));
+        return false;
+    }
 
     app.project.file_path = file_path;
     size_t sep = file_path.find_last_of(L'\\');
     app.project.file_name = (sep != std::wstring::npos) ? file_path.substr(sep + 1) : file_path;
+
+    app_msg_set(AppMsgSeverity::Success,
+        tr_fmt(u8"已加载工程：{}", wide_to_utf8(app.project.file_name)));
 
     bool existed = false;
     for (auto& entry : app.project.file_history) {

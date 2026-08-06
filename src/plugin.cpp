@@ -1,6 +1,7 @@
 ﻿#include "plugin.h"
 #include "i18n/i18n.h"
 #include "config2.h"
+#include "core/app_message.h"
 #include "parsers/rpp/rpp_parser.h"
 #include "parsers/midi/midi_parser.h"
 #include "exo/object_generator.h"
@@ -139,6 +140,7 @@ static void update_scene_from_edit(EDIT_SECTION* edit) {
 
 struct GenCallState {
     uint32_t seed;
+    bool any_created = false;
 };
 
 static void gen_edit_callback(void* param, EDIT_SECTION* edit) {
@@ -181,20 +183,29 @@ static void gen_edit_callback(void* param, EDIT_SECTION* edit) {
             g_host.logger->warn(g_host.logger, utf8_to_wide(w).c_str());
     }
 
-    if (g_host.logger)
-        g_host.logger->log(g_host.logger, utf8_to_wide(tr_fmt(u8"已生成 {} 个物件", result.objects.size())).c_str());
-
-    delete cs;
+    cs->any_created = !result.objects.empty();
+    if (cs->any_created) {
+        if (g_host.logger)
+            g_host.logger->log(g_host.logger, utf8_to_wide(tr_fmt(u8"已生成 {} 个物件", result.objects.size())).c_str());
+        app_msg_set(AppMsgSeverity::Success,
+            tr_fmt(u8"已生成 {} 个物件", result.objects.size()));
+    } else {
+        if (g_host.logger)
+            g_host.logger->warn(g_host.logger, utf8_to_wide(tr_str(u8"未生成任何物件，请检查轨道选择")).c_str());
+        app_msg_set(AppMsgSeverity::Error, tr_str(u8"未生成任何物件，请检查轨道选择"));
+    }
 }
 
-static void on_generate_from_imgui() {
+static bool on_generate_from_imgui() {
     if (!g_app.project.has_data) {
+        app_msg_set(AppMsgSeverity::Error, tr_str(u8"未加载音频工程"));
         if (g_host.logger) g_host.logger->warn(g_host.logger, utf8_to_wide(tr_str(u8"未加载音频工程")).c_str());
-        return;
+        return false;
     }
     if (g_app.templates.empty()) {
+        app_msg_set(AppMsgSeverity::Error, tr_str(u8"未设置模板，请右键已选物件 → 配置导入... 重新打开"));
         if (g_host.logger) g_host.logger->error(g_host.logger, utf8_to_wide(tr_str(u8"未设置模板，请右键已选物件 → 配置导入... 重新打开")).c_str());
-        return;
+        return false;
     }
 
     save_current_template_data();
@@ -206,6 +217,9 @@ static void on_generate_from_imgui() {
 
     auto* cs = new GenCallState{seed};
     g_host.edit_handle->call_edit_section_param(cs, gen_edit_callback);
+    bool ok = cs->any_created;
+    delete cs;
+    return ok;
 }
 
 static void on_open_config(EDIT_SECTION* edit) {
@@ -313,6 +327,14 @@ static void on_file_drop(EDIT_SECTION* edit, LPCWSTR file) {
         if (g_host.logger)
             g_host.logger->log(g_host.logger, (L"AutoZWJ: " + get_project_summary(g_app)).c_str());
         imgui_window_show();
+    } else {
+        // 解析失败且窗口未打开：打开窗口展示结果栏错误，避免拖放无任何反馈
+        // （EDIT_SECTION 回调上下文不使用阻塞式 MessageBox 防止宿主重入）
+        if (g_host.logger)
+            g_host.logger->warn(g_host.logger, utf8_to_wide(app_msg_current().text).c_str());
+        if (!imgui_window_is_visible()) {
+            imgui_window_show();
+        }
     }
 }
 

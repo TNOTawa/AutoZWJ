@@ -25,14 +25,14 @@ Place `AutoZWJ.aux2` in AviUtl2's `Plugin` directory, then launch AviUtl2.
 
 ## Quick Start
 
-1. **Load a project**  
-   Right-click empty area on timeline → **Select audio project...** → choose a `.rpp` or `.mid` file
+1. **Start**  
+   Select **any object** on the timeline, right-click → **Configure import...**. If the timeline is empty, place any object first to serve as a template, or skip to step 2 and drop a project file
 
-2. **Select templates**  
-   Select one or more objects on the timeline to use as style templates (effect chains, filters, etc. will be inherited)
+2. **Load a project**  
+   If no project is loaded yet, the plugin window opens on the import page automatically: drop a `.rpp` / `.mid` file onto the AviUtl2 window, or choose a REAPER recent file / **Browse...** on the import page; then check the tracks to generate and click **Confirm import**
 
 3. **Configure and generate**  
-   Right-click selected objects → **Configure import...** → adjust parameters in the popup window → click **OK** or **Apply**
+   Adjust parameters on the config page → click **OK** or **Apply**
 
 For detailed tutorials and feature explanations, see the [documentation](../zh/).
 

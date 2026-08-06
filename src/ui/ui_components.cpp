@@ -1,6 +1,7 @@
 ﻿#include "ui_components.h"
 #include "i18n/i18n.h"
 #include "ui/ui_config.h"
+#include "core/app_message.h"
 #include "effect/effect_dict.h"
 #include "ui/file_picker.h"
 #include "ui/imgui_window.h"
@@ -15,7 +16,6 @@
 AppPage g_current_page = AppPage::Config;
 static bool g_show_no_project_popup = false;
 static bool g_show_feature_switches = false;
-static bool g_show_preferences = false;
 
 // ---------------------------------------------------------------------------
 // 目录持久化
@@ -127,6 +127,20 @@ static bool GhostSmallButton(const char* label) {
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     return ret;
+}
+
+// ---------------------------------------------------------------------------
+// 结果栏（最近一次操作结果：成功次要色 / 失败警告色）
+// ---------------------------------------------------------------------------
+void render_message_bar() {
+    const AppMessage& msg = app_msg_current();
+    if (msg.text.empty()) return;
+
+    ImGui::PushStyleColor(ImGuiCol_Text,
+        (msg.severity == AppMsgSeverity::Error || msg.severity == AppMsgSeverity::Warn)
+            ? UI::COL_WARNING_TEXT : UI::COL_TEXT_SECONDARY);
+    ImGui::TextUnformatted(msg.text.c_str());
+    ImGui::PopStyleColor();
 }
 
 // ---------------------------------------------------------------------------
@@ -278,16 +292,6 @@ void render_track_tree(bool read_only) {
 void render_nav_bar() {
     if (!ImGui::BeginMenuBar()) return;
 
-    // 左侧：文件
-    if (ImGui::BeginMenu(tr(u8"文件"))) {
-        if (ImGui::MenuItem(tr(u8"首选项..."))) {
-            // 不能在菜单内直接 OpenPopup（ID 上下文与菜单关闭连带问题），
-            // 须在菜单外延迟打开（同 BPM 提示/功能开关页面）
-            g_show_preferences = true;
-        }
-        ImGui::EndMenu();
-    }
-
     // 工具菜单
     if (ImGui::BeginMenu(tr(u8"工具"))) {
         if (ImGui::MenuItem(tr(u8"应用BPM网格到时间轴"))) {
@@ -364,22 +368,6 @@ void render_nav_bar() {
     }
     if (ImGui::BeginPopupModal(tr(u8"BPM网格提示"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("%s", tr(u8"请先导入工程文件"));
-        if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
-
-    // 首选项弹窗
-    if (g_show_preferences) {
-        g_show_preferences = false;
-        ImGui::OpenPopup("##preferences");
-    }
-    if (ImGui::BeginPopupModal("##preferences", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("%s", tr(u8"首选项"));
-        ImGui::Separator();
-        ImGui::TextDisabled("%s", tr(u8"宿主菜单需重启 AviUtl2 生效"));
-        ImGui::Spacing();
         if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
             ImGui::CloseCurrentPopup();
         }
@@ -487,12 +475,16 @@ void render_import_page() {
     ImGui::Separator();
 
     // --- 轨道树（可滚动区域，留空间给底部按钮）---
+    float msg_height = app_msg_current().text.empty() ? 0.0f : ImGui::GetFrameHeightWithSpacing();
     float button_height = 45.0f;
-    float avail_h = ImGui::GetContentRegionAvail().y - button_height - ImGui::GetStyle().ItemSpacing.y;
+    float avail_h = ImGui::GetContentRegionAvail().y - button_height - msg_height - ImGui::GetStyle().ItemSpacing.y;
 
     ImGui::BeginChild("ImportTreeScroll", ImVec2(0, std::max(avail_h, 100.0f)), true);
     render_track_tree(true);
     ImGui::EndChild();
+
+    // --- 结果栏 ---
+    render_message_bar();
 
     // --- 底部固定按钮区：确认导入 / 取消 ---
     if (ImGui::Button(tr(u8"确认导入"), ImVec2(140, 35))) {
@@ -604,7 +596,8 @@ void render_config_page() {
         ImGui::Separator();
     }
 
-    float avail_h = ImGui::GetContentRegionAvail().y - 50;
+    float msg_h = app_msg_current().text.empty() ? 0.0f : ImGui::GetFrameHeightWithSpacing();
+    float avail_h = ImGui::GetContentRegionAvail().y - 50.0f - msg_h;
     float avail_w = ImGui::GetContentRegionAvail().x;
 
     static float anim_width = 0.0f;
@@ -658,12 +651,26 @@ void render_config_page() {
     }
 
     ImGui::Columns(1);
+    render_message_bar();
     render_action_bar();
 }
 
 // ---------------------------------------------------------------------------
 // 参数设置面板
 // ---------------------------------------------------------------------------
+// 参数旁悬浮帮助：悬停 (?) 显示说明文字
+static void HelpTooltip(const char* text) {
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
 void render_config_panel() {
     OutputConfig& cfg = g_app.project.config;
     SceneInfo& info = g_app.scene;
@@ -684,6 +691,7 @@ void render_config_panel() {
     if (ImGui::InputDouble(tr(u8"基准时间（秒）"), &cfg.base_time_sec, 0.1, 1.0, "%.1f")) {
         update_current_project_offset(g_app, cfg.base_time_sec);
     }
+    HelpTooltip(tr(u8"基准时间偏移：正值延后、负值提前，按工程文件自动记忆"));
 
     ImGui::Spacing();
     ImGui::Text("%s", tr(u8"参数设置"));
@@ -722,13 +730,16 @@ void render_config_panel() {
         const char* counter_modes[] = { tr(u8"全部"), tr(u8"图层") };
         ImGui::SetNextItemWidth(100);
         ImGui::Combo(tr(u8"计数模式"), &cfg.flip_counter_mode, counter_modes, 2);
+        HelpTooltip(tr(u8"全部：按全局物件顺序计数；图层：仅按当前图层内物件计数"));
         ImGui::Unindent(16);
     }
     if (flip_highlight) {
         ImGui::PopStyleColor(6);
     }
     ImGui::Checkbox(tr(u8"无节拍同步"), &cfg.beatless_sync);
+    HelpTooltip(tr(u8"关闭节拍对齐：物件按音符起始帧放置，不吸附 BPM 节拍"));
     ImGui::Checkbox(tr(u8"向上取整帧"), &cfg.use_round_up);
+    HelpTooltip(tr(u8"物件帧号计算时向上取整，默认四舍五入"));
 
     ImGui::Spacing();
     ImGui::Text("%s", tr(u8"物件与音符同步"));
@@ -751,10 +762,12 @@ void render_config_panel() {
 
     const char* layer_strategy_labels[] = { tr(u8"优化模式"), tr(u8"持续累加模式"), tr(u8"交替换行") };
     ImGui::Combo(tr(u8"层分配策略"), &cfg.layer_strategy, layer_strategy_labels, 3);
+    HelpTooltip(tr(u8"优化模式：复用已结束的图层紧凑排列；持续累加模式：始终追加新图层；交替换行：奇偶物件分到不同图层组"));
     ImGui::Checkbox(tr(u8"反转轨道顺序"), &cfg.reverse_layer_order);
 
     const char* track_filter_labels[] = { tr(u8"全部独立"), tr(u8"仅取第N轨"), tr(u8"仅取倒数第N轨") };
     ImGui::Combo(tr(u8"多音符策略"), &cfg.track_filter_mode, track_filter_labels, 3);
+    HelpTooltip(tr(u8"全部独立：每个音符生成一个物件；仅取第N轨/倒数第N轨：仅保留层分配后第 N 层或倒数第 N 层的物件"));
     if (cfg.track_filter_mode != 0) {
         ImGui::Indent(16);
         ImGui::InputInt(tr(u8"N"), &cfg.track_filter_n, 1, 1);
@@ -838,8 +851,7 @@ void render_action_bar() {
     }
     ImGui::SameLine();
     if (ImGui::Button(tr(u8"确定"), ImVec2(110, 30))) {
-        if (g_app.project.has_data) {
-            imgui_window_trigger_generate();
+        if (g_app.project.has_data && imgui_window_trigger_generate()) {
             imgui_window_hide();
         }
     }

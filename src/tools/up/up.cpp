@@ -4,6 +4,8 @@
 #include "plugin.h"
 #include "i18n/i18n.h"
 #include "codec/codec.h"
+#include "core/app_message.h"
+#include "ui/imgui_window.h"
 #include <windows.h>
 #include <algorithm>
 #include <cmath>
@@ -117,6 +119,18 @@ static void generate_objects(EDIT_SECTION* edit, const UpProject& proj, double f
         g_host.logger->log(g_host.logger, utf8_to_wide(
             tr_fmt(u8"AutoZWJ: 已从剪贴板导入 {} 个物件（{} 条轨道）", total_items, (int)proj.tracks.size())).c_str());
     }
+    app_msg_set(AppMsgSeverity::Success,
+        tr_fmt(u8"已从剪贴板导入 {} 个物件（{} 条轨道）", total_items, (int)proj.tracks.size()));
+}
+
+// 剪贴板导入失败反馈：写结果栏 + 控制台；窗口不可见时打开窗口展示错误
+// （宿主回调为 EDIT_SECTION 上下文，不使用阻塞式 MessageBox 防止重入）
+static void up_import_fail(const std::wstring& text) {
+    app_msg_set(AppMsgSeverity::Error, wide_to_utf8(text));
+    if (g_host.logger) g_host.logger->log(g_host.logger, text.c_str());
+    if (!imgui_window_is_visible()) {
+        imgui_window_show();
+    }
 }
 
 static void on_import_clipboard(EDIT_SECTION* edit) {
@@ -133,19 +147,19 @@ static void on_import_clipboard(EDIT_SECTION* edit) {
 
     UINT cf = RegisterClipboardFormatW(L"REAPERMedia");
     if (cf == 0) {
-        if (g_host.logger) g_host.logger->log(g_host.logger, utf8_to_wide(tr_str(u8"AutoZWJ: 无法注册 REAPERMedia 剪贴板格式")).c_str());
+        up_import_fail(utf8_to_wide(tr_str(u8"AutoZWJ: 无法注册 REAPERMedia 剪贴板格式")));
         return;
     }
 
     if (!OpenClipboard(nullptr)) {
-        if (g_host.logger) g_host.logger->log(g_host.logger, utf8_to_wide(tr_str(u8"AutoZWJ: 无法打开剪贴板")).c_str());
+        up_import_fail(utf8_to_wide(tr_str(u8"AutoZWJ: 无法打开剪贴板")));
         return;
     }
 
     HGLOBAL hMem = GetClipboardData(cf);
     if (!hMem) {
         CloseClipboard();
-        if (g_host.logger) g_host.logger->log(g_host.logger, utf8_to_wide(tr_str(u8"AutoZWJ: 剪贴板中没有 REAPERMedia 数据")).c_str());
+        up_import_fail(utf8_to_wide(tr_str(u8"AutoZWJ: 剪贴板中没有 REAPERMedia 数据")));
         return;
     }
 
@@ -154,7 +168,7 @@ static void on_import_clipboard(EDIT_SECTION* edit) {
     if (!ptr || size == 0) {
         GlobalUnlock(hMem);
         CloseClipboard();
-        if (g_host.logger) g_host.logger->log(g_host.logger, utf8_to_wide(tr_str(u8"AutoZWJ: 剪贴板数据为空")).c_str());
+        up_import_fail(utf8_to_wide(tr_str(u8"AutoZWJ: 剪贴板数据为空")));
         return;
     }
 
@@ -163,10 +177,7 @@ static void on_import_clipboard(EDIT_SECTION* edit) {
     if (size > kMaxClipboardBytes) {
         GlobalUnlock(hMem);
         CloseClipboard();
-        if (g_host.logger) {
-            g_host.logger->log(g_host.logger, utf8_to_wide(
-                tr_fmt(u8"AutoZWJ: 剪贴板数据过大（{} MB），已忽略", (int)(size / (1024u * 1024u)))).c_str());
-        }
+        up_import_fail(utf8_to_wide(tr_fmt(u8"AutoZWJ: 剪贴板数据过大（{} MB），已忽略", (int)(size / (1024u * 1024u)))));
         return;
     }
 
@@ -176,7 +187,7 @@ static void on_import_clipboard(EDIT_SECTION* edit) {
 
     UpProject proj;
     if (!parse_reaper_media(data, proj)) {
-        if (g_host.logger) g_host.logger->log(g_host.logger, utf8_to_wide(tr_str(u8"AutoZWJ: 剪贴板中未找到可导入的媒体数据")).c_str());
+        up_import_fail(utf8_to_wide(tr_str(u8"AutoZWJ: 剪贴板中未找到可导入的媒体数据")));
         return;
     }
 

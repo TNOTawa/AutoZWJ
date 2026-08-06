@@ -19,6 +19,7 @@ void render_config_page();
 void render_track_tree(bool read_only = false);
 void render_config_panel();
 void render_action_bar();
+void render_message_bar();
 
 // 目录持久化
 std::wstring load_last_directory();

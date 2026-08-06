@@ -25,7 +25,7 @@ static ID3D11RenderTargetView* g_rtv = nullptr;
 static bool g_visible = false;
 static bool g_initialized = false;
 static bool g_rendering = false;
-static void (*g_on_generate)() = nullptr;
+static bool (*g_on_generate)() = nullptr;
 static WNDCLASSEXW g_wc = {};
 ImFont* g_font_normal = nullptr;
 ImFont* g_font_bold = nullptr;
@@ -332,10 +332,11 @@ void imgui_window_hide() {
 
 bool imgui_window_is_visible() { return g_visible; }
 
-void imgui_window_set_generate_callback(void (*cb)()) { g_on_generate = cb; }
+void imgui_window_set_generate_callback(bool (*cb)()) { g_on_generate = cb; }
 
-void imgui_window_trigger_generate() {
-    if (g_on_generate) g_on_generate();
+bool imgui_window_trigger_generate() {
+    if (g_on_generate) return g_on_generate();
+    return false;
 }
 
 void imgui_window_shutdown() {
