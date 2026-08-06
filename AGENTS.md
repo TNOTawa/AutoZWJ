@@ -33,7 +33,8 @@ src/
 │   └── effect_chain_editor.h/cpp   # 效果链编辑器面板（参数 bake + 变量映射 + 预设拖拽）
 ├── tools/
 │   └── tempo/tempo_apply.h/cpp     # BPM 网格同步工具（增强非必要功能）
-└── thirdparty/imgui/               # Dear ImGui docking 分支
+├── version.rc.in                   # VERSIONINFO 产物元数据模板（版本/作者 TNOTawa）
+└── thirdparty/imgui/               # Dear ImGui docking 分支（git 子模块）
 ```
 
 ---
@@ -103,16 +104,28 @@ src/
 - 使用 g++ 15.2.0 或更新版本
 - 构建自包含的静态 DLL
 
+### 依赖（git 子模块）
+- `aviutl2_sdk` —— AviUtl2 SDK 镜像仓库（头文件根为 `include/aviutl2_sdk/`，CMake include 指向该子目录）
+- `src/thirdparty/imgui` —— Dear ImGui docking 分支
+- 首次克隆后需执行 `git submodule update --init --recursive`
+
 ### 构建命令
 
 ```powershell
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
+# 本地开发：Debug 构建（含完整调试信息，产物约 20MB）
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G "MinGW Makefiles"
 cmake --build build
 
 # 产物: build/AutoZWJ.aux2
 ```
 
 > MinGW Makefiles 为单配置生成器，构建类型由首次 `-DCMAKE_BUILD_TYPE` 锁定到缓存。若需切换 Debug/Release，先删除 `build/CMakeCache.txt` 再重新配置。
+
+### 版本与发布
+- 版本单一来源为 `CMakeLists.txt` 首行 `project(AutoZWJ VERSION x.y.z)`；`src/version.rc.in` 经 `configure_file()` 生成 `build/version.rc` 注入 DLL 文件属性（文件版本、作者 TNOTawa 等）
+- 本地用 Debug 开发；正式产物由 GitHub Actions（`.github/workflows/build.yml`，MSYS2 UCRT64 + Ninja Release）构建
+- 推送 `v*` tag 触发构建，CI 校验 tag 与 `project(VERSION)` 一致后发布 GitHub Release 并附 `AutoZWJ.aux2`
+- 发版流程：改 `project()` 版本号 → 提交推送 → `git tag v0.2.7 && git push origin v0.2.7`
 
 ---
 

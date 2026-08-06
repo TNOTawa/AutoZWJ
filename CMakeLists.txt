@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AutoZWJ VERSION 0.2.5 LANGUAGES CXX)
+project(AutoZWJ VERSION 0.2.6 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -20,6 +20,18 @@ file(READ "${CMAKE_SOURCE_DIR}/src/i18n/lang/ja.ini" JA_INI)
 configure_file(
     "${CMAKE_SOURCE_DIR}/src/i18n/i18n_embedded.h.in"
     "${CMAKE_SOURCE_DIR}/src/i18n/i18n_embedded.h"
+    @ONLY
+)
+
+# ---- 产物元数据：版本号/作者写入 DLL 文件属性 (VERSIONINFO) ----
+# 版本单一来源为 project(AutoZWJ VERSION ...)，此处仅做拆分注入
+set(AUTOZWJ_VERSION_FILE
+    "${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},0")
+set(AUTOZWJ_VERSION_STR
+    "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/src/version.rc.in"
+    "${CMAKE_BINARY_DIR}/version.rc"
     @ONLY
 )
 
@@ -44,7 +56,7 @@ add_library(autozwj_ui STATIC
 )
 target_include_directories(autozwj_ui PRIVATE
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/aviutl2_sdk
+    ${CMAKE_SOURCE_DIR}/aviutl2_sdk/include/aviutl2_sdk
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
 )
@@ -62,6 +74,7 @@ add_library(AutoZWJ SHARED
     src/application/import_service.cpp
     src/application/project_controller.cpp
     src/adapters/project_file_store.cpp
+    ${CMAKE_BINARY_DIR}/version.rc
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp
@@ -71,7 +84,7 @@ add_library(AutoZWJ SHARED
 )
 target_include_directories(AutoZWJ PRIVATE
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/aviutl2_sdk
+    ${CMAKE_SOURCE_DIR}/aviutl2_sdk/include/aviutl2_sdk
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
 )
@@ -95,28 +108,29 @@ set_source_files_properties(
 )
 
 # ---- autozwj_test: CLI test runner (links only autozwj_core) ----
-add_executable(autozwj_test
-    tests/test_generation.cpp
-)
-target_include_directories(autozwj_test PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-)
-target_link_libraries(autozwj_test PRIVATE
-    autozwj_core
-)
+# 测试可执行文件，需要时取消注释
+# add_executable(autozwj_test
+#     tests/test_generation.cpp
+# )
+# target_include_directories(autozwj_test PRIVATE
+#     ${CMAKE_SOURCE_DIR}/src
+# )
+# target_link_libraries(autozwj_test PRIVATE
+#     autozwj_core
+# )
 
 # ---- autozwj_test_up: UP 解析器 CLI 测试 ----
-add_executable(autozwj_test_up
-    tests/test_up_parser.cpp
-)
-target_include_directories(autozwj_test_up PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-)
-target_link_libraries(autozwj_test_up PRIVATE
-    autozwj_core
-)
+# add_executable(autozwj_test_up
+#     tests/test_up_parser.cpp
+# )
+# target_include_directories(autozwj_test_up PRIVATE
+#     ${CMAKE_SOURCE_DIR}/src
+# )
+# target_link_libraries(autozwj_test_up PRIVATE
+#     autozwj_core
+# )
 
 # ---- dump_clipboard: 剪贴板 REAPERMedia 数据导出工具（测试夹具采集用） ----
-add_executable(dump_clipboard
-    tests/fixtures/dump_clipboard.cpp
-)
+# add_executable(dump_clipboard
+#     tests/fixtures/dump_clipboard.cpp
+# )

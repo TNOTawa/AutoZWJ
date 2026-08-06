@@ -38,16 +38,15 @@
 
 ## 构建
 
-需要 MinGW-w64 (g++ 15.2+)、CMake 3.20+、Dear ImGui docking branch。
+需要 MinGW-w64 (g++ 15.2+)、CMake 3.20+。AviUtl2 SDK 与 Dear ImGui 以 git 子模块管理，首次克隆后先初始化：
 
 ```powershell
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
+git submodule update --init --recursive
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G "MinGW Makefiles"
 cmake --build build
 ```
 
-产物为 `build/AutoZWJ.aux2`。
-
-详见 [docs/zh/build.md](docs/zh/build.md)。
+产物为 `build/AutoZWJ.aux2`。正式发版由 GitHub Actions 在推送 `v*` tag 时自动构建 Release 并发布，详见 [docs/zh/build.md](docs/zh/build.md)。
 
 ## 参考
 

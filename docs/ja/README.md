@@ -38,16 +38,17 @@ REAPERプロジェクトファイル（`.rpp`）、標準MIDIファイル（`.mi
 
 ## ビルド
 
-MinGW-w64 (g++ 15.2+)、CMake 3.20+、Dear ImGui docking branch が必要です。
+MinGW-w64 (g++ 15.2+)、CMake 3.20+ が必要です。AviUtl2 SDK と Dear ImGui は git サブモジュールとして管理されているため、初回クローン後に:
 
 ```powershell
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
+git submodule update --init --recursive
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G "MinGW Makefiles"
 cmake --build build
 ```
 
 生成物: `build/AutoZWJ.aux2`
 
-詳細は [ビルドガイド](../zh/build.md) を参照してください。
+正式リリースは GitHub Actions が `v*` タグのプッシュ時に Release ビルドを実行し、GitHub Release として公開します。詳細は [ビルドガイド](../zh/build.md) を参照してください。
 
 ## 参考
 

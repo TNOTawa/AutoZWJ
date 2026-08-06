@@ -1,0 +1,51 @@
+name: 构建并发布
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+
+      - name: 校验版本号一致
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          ver=$(sed -n 's/.*project(AutoZWJ VERSION \([0-9][0-9.]*\) LANGUAGES.*/\1/p' CMakeLists.txt)
+          echo "tag=$tag  version=$ver"
+          if [ -z "$ver" ] || [ "$tag" != "$ver" ]; then
+            echo "错误：tag($tag) 与 CMakeLists.txt 的 VERSION($ver) 不一致"
+            exit 1
+          fi
+
+      - name: 配置（Release）
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: 构建
+        run: cmake --build build
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/AutoZWJ.aux2
+          generate_release_notes: true

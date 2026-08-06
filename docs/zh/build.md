@@ -6,13 +6,22 @@
 |------|------|------|
 | MinGW-w64 | g++ 15.2+ (需支持 C++20) | 构建自包含的静态 DLL |
 | CMake | 3.20+ | 构建系统 |
-| Dear ImGui | docking branch | 置于 `src/thirdparty/imgui/` |
+| AviUtl2 SDK | git 子模块 `aviutl2_sdk`（镜像仓库） | 头文件位于 `include/aviutl2_sdk/` |
+| Dear ImGui | docking 分支（git 子模块 `src/thirdparty/imgui/`） | — |
 | DirectX 11 SDK | — | Windows 自带 |
 
 ## 构建命令
 
+首次克隆后初始化子模块：
+
 ```powershell
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
+git submodule update --init --recursive
+```
+
+本地开发使用 Debug 构建（含完整调试信息，产物约 20MB）：
+
+```powershell
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G "MinGW Makefiles"
 cmake --build build
 ```
 
@@ -20,11 +29,20 @@ cmake --build build
 
 产物为 `build/AutoZWJ.aux2`。
 
+## 版本与发布
+
+- 版本单一来源：`CMakeLists.txt` 首行 `project(AutoZWJ VERSION x.y.z)`，DLL 文件属性（文件版本、作者 TNOTawa 等）由 `src/version.rc.in` 模板经 `configure_file()` 生成注入
+- 正式产物（Release）由 GitHub Actions 构建：`.github/workflows/build.yml`，使用 MSYS2 UCRT64 + Ninja
+- 推送 `v*` tag 触发构建；CI 校验 tag 与 `project(VERSION)` 一致后发布 GitHub Release 并附带 `AutoZWJ.aux2`
+- 发版步骤：① 本地修改 `project()` 版本号并提交推送；② `git tag v0.2.7 && git push origin v0.2.7`
+
 ---
 
 ## 项目结构
 
 ```
+.github/workflows/build.yml      # tag 推送 → Release 构建 + GitHub Release 发布
+aviutl2_sdk/                     # AviUtl2 SDK（git 子模块，头文件在 include/aviutl2_sdk/）
 src/
 ├── plugin.h/cpp                    # 插件入口、回调注册、生成引擎、层分配、变量绑定
 ├── i18n/
@@ -54,7 +72,8 @@ src/
 │   └── effect_chain_editor.h/cpp   # 效果链编辑器面板（参数 bake + 变量映射 + 预设拖拽）
 ├── tools/
 │   └── tempo/tempo_apply.h/cpp     # BPM 网格同步工具
-└── thirdparty/imgui/               # Dear ImGui docking 分支
+├── version.rc.in                   # VERSIONINFO 产物元数据模板（版本/作者）
+└── thirdparty/imgui/               # Dear ImGui docking 分支（git 子模块）
 ```
 
 ---

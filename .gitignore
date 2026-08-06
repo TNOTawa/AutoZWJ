@@ -1,8 +1,9 @@
-﻿# SDK and references (read-only)
+﻿# References (read-only)
 references/
-aviutl2_sdk/
 /tools/
-src/thirdparty/
+
+# 备份目录（子模块迁移/升级时的临时备份）
+*.bak/
 
 # Internal state
 .kilo/
