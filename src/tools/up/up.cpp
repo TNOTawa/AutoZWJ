@@ -68,7 +68,7 @@ static void generate_objects(EDIT_SECTION* edit, const UpProject& proj, double f
             int use_layer = base_layer + layer_offset;
 
             std::wstring wpath = utf8_to_wide(item.file_path);
-            OBJECT_HANDLE obj = edit->create_object_from_media_file(wpath.c_str(), use_layer, sf, length);
+            OBJECT_HANDLE obj = edit->create_object_from_media_file(wpath.c_str(), use_layer, sf - 1, length);
 
             if (!obj) {
                 if (g_host.logger) {

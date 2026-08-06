@@ -159,7 +159,7 @@ static void gen_edit_callback(void* param, EDIT_SECTION* edit) {
     auto result = generate(in);
 
     for (auto& s : result.objects) {
-        auto obj = edit->create_object_from_alias(s.alias_chain.c_str(), s.layer, s.sf, s.ef - s.sf);
+        auto obj = edit->create_object_from_alias(s.alias_chain.c_str(), s.layer, s.sf - 1, s.ef - s.sf);
         if (obj) {
             std::wstring nm;
             switch (s.name_kind) {

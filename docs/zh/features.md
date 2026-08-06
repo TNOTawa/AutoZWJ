@@ -78,7 +78,7 @@ AutoZWJ 的核心设计是**模板驱动**：
 
 ## 帧计算
 
-AviUtl2 帧编号从 **1** 开始：
+AviUtl2 **显示帧从 1 开始**，内部 `sf/ef` 以显示帧语义计算：
 
 ```
 sf = round(pos * fps + 1.0)   // 开始帧
@@ -87,7 +87,9 @@ ef = round(bf)                // 结束帧
 
 其中 `bf = sf + length * fps - 1`（未取整的浮点结束帧）。层分配时比较的是浮点 `bf` 与 `obj_fp`，取整仅用于最终输出。
 
-可选 **向上取整帧**（`use_round_up`）替代四舍五入。
+**向上取整帧**（`use_round_up`）默认开启：与 AviUtl2 的 BPM 网格算法一致，关闭后物件可能与网格不对齐。
+
+> **API 边界**：SDK 物件帧参数（`create_object_from_alias` / `create_object_from_media_file` 的 frame）是 **0 基数据帧**，显示 = 数据 + 1。调用时必须传 `sf - 1`；length 参数保持不变（`ef - sf`，实测为含结束端偏移，时长恰好正确）。
 
 ---
 
@@ -172,7 +174,7 @@ primary  = number | identifier [ "(" args ")" ] | "(" expr ")"
 `tempo_map_to_bpm_info()`（`parsers/tempo_convert.h`）负责将 MIDI 和 RPP 两种来源的 tempo map 统一转换为 `BPM_INFO[]` 格式：
 
 - 在**秒域**进行统一计算，不依赖 tick 或 beat 单位
-- 拍号变化触发小节起点重置，tempo 变化按当前小节时长对齐
+- `offset` 恒为 0，每个 tempo 点从自身 `start` 起按 `beat` 生成拍线
 - 同时间点多事件时，拍号优先于 tempo
 - 基准时间偏移叠加到每个 `BPM_INFO.start` 上
 

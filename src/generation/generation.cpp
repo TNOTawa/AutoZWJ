@@ -523,9 +523,6 @@ GenerationResult generate(const GenerationInput& in) {
                         double next_fp = (k + 1 < i && objdict.pos[k + 1] > -0.5)
                             ? objdict.pos[k + 1] * fps + 1.0 : -1;
 
-                        if (std::round(obj_fp + obj_fl) == std::round(next_fp) - 1)
-                            obj_fl += 1;
-
                         if (obj_fp < 0) continue;
 
                         double bf = obj_fp + obj_fl - 1;
@@ -546,6 +543,13 @@ GenerationResult generate(const GenerationInput& in) {
                         } else {
                             ef = (int)frame_round(bf, config.use_round_up);
                             if (ef <= sf) ef = sf + 1;
+                            // 相邻音符：仅在输出帧域存在恰好 1 帧缝隙时补平（ef = next_sf - 2 时），
+                            // 避免向上取整下把亚帧缝误判为 1 帧缝造成重叠
+                            if (next_fp > 0 && config.sync_mode != 1) {
+                                int next_sf = (int)frame_round(next_fp, config.use_round_up);
+                                if (next_sf < 1) next_sf = 1;
+                                if (next_sf - ef == 2) ef = next_sf - 1;
+                            }
                         }
 
                         bf = (double)ef;

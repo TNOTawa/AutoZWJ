@@ -80,6 +80,7 @@ static void test_round_up() {
 
     SceneInfo scene;
     OutputConfig config;
+    config.use_round_up = false;
 
     auto res_round = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
     check(res_round.objects.size() == 1, "round mode: one object expected");

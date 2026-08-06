@@ -14,7 +14,8 @@ struct OutputConfig {
     bool alt_flip = false;
     int flip_type = 0;
     int flip_counter_mode = 0;
-    bool use_round_up = false;
+    // 默认开启：与 AviUtl2 的 BPM 网格算法一致（向上取整），关闭后物件可能与网格不对齐
+    bool use_round_up = true;
     int clipping = 0;
     int is_ex_set = 0;
 

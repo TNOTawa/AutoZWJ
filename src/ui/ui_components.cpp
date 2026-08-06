@@ -738,7 +738,7 @@ void render_config_panel() {
         ImGui::PopStyleColor(6);
     }
     ImGui::Checkbox(tr(u8"向上取整帧"), &cfg.use_round_up);
-    HelpTooltip(tr(u8"物件帧号计算时向上取整，默认四舍五入"));
+    HelpTooltip(tr(u8"与 AviUtl2 的 BPM 网格算法一致（向上取整），默认开启；关闭后物件可能与网格不对齐"));
 
     ImGui::Spacing();
     ImGui::Text("%s", tr(u8"物件与音符同步"));

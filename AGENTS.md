@@ -46,13 +46,13 @@ src/
 | **两阶段分离** | ① 右键空白→选择工程（仅解析）；② 右键物件→配置导入→ImGui窗口内执行生成 |
 | **空轨过滤** | 解析后保留空轨在树中（灰色可选），但生成时静默跳过 |
 | **层分配** | 参考 RPPtoEXO 原版的贪婪首次适配，float `bf` vs float `obj_fp` 比较后取整输出 |
-| **帧计算** | `sf = round(pos*fps+1.0)`, `ef = round(bf)`，AviUtl2 帧从 1 开始 |
+| **帧计算** | 内部以显示帧语义计算：`sf = frame_round(pos*fps+1.0)`, `ef = frame_round(bf)`；**默认向上取整**（与 AviUtl2 的 BPM 网格算法一致，关闭后可能与网格不对齐），四舍五入仅为可选项；SDK 物件帧参数是 **0 基数据帧**（显示 = 数据 + 1），调用 `create_object_from_alias` / `create_object_from_media_file` 时传 `sf-1`，length 参数不动 |
 | **ImGui 窗口** | 独立 `WS_OVERLAPPEDWINDOW` + `SetTimer(16ms)` 驱动渲染 |
 | **多源映射** | 支持多模板物件选中，三种策略分配模板：顺序轮替 / 随机抽选 / 和弦映射 |
 | **效果链编辑器** | 三面板抽屉式布局，只读展示模板效果链，勾选参数 bake + 设置目标值 |
 | **脚本变量系统** | `$note.velocity$ / 127 * 200` 表达式驱动 bake 值，`ExprEvaluator` 递归下降求值 |
 | **动态预设** | 翻转等预设可视化并在效果链面板中拖拽调整插入位置 |
-| **BPM 网格工具** | 从 MIDI/RPP 提取 tempo map，经 `tempo_map_to_bpm_info()` 秒域统一转换后写 `set_grid_bpm_list`；按钮主动触发，不持久化 |
+| **BPM 网格工具** | 从 MIDI/RPP 提取 tempo map，经 `tempo_map_to_bpm_info()` 秒域统一转换（`offset` 恒为 0，各 tempo 点从自身 `start` 起按 `beat` 生成拍线）后写 `set_grid_bpm_list`；按钮主动触发，不持久化 |
 
 ## 模板模式的关键流程
 
@@ -75,7 +75,7 @@ src/
 
 ### 致命错误
 1. **alias section 格式**：`get_object_alias()` 返回 `[Object]`/`[Object.N]`，`create_object_from_alias()` 输入可接受 `[0]`/`[0.N]`。模板提取时必须将 `[Object.N]` 归一化为 `[0.N]`。
-2. **帧从 1 开始**：AviUtl2 帧编号从 1 开始。
+2. **帧编号双基**：AviUtl2 **显示帧从 1 开始**，但 SDK 物件帧参数（`create_object_from_alias` / `create_object_from_media_file` 的 frame）是 **0 基数据帧**，显示 = 数据 + 1。内部 `sf/ef` 保持显示帧语义，仅在调用处传 `sf-1`；length 参数保持 `ef-sf` 不动（实测为含结束端偏移，时长恰好正确）。
 3. **层占用判定**：用 float `bf`（未取整）比较 float `obj_fp` 后，再用 int 输出。
 4. **`call_edit_section_param` 不可嵌套**。
 5. **lambda with capture 不能传 C 函数指针**：需用无捕获 lambda + `call_edit_section_param(state, ...)` 传参。
@@ -84,6 +84,8 @@ src/
 8. **跨工程数据隔离**：切换工程时全局变量不卸载。任何 EDIT_SECTION 回调入口必须先重置 `g_project_state = ProjectState{}` 再从 `PROJECT_FILE` 重新加载。
 9. **模板 alias 中隐藏键**：`Group=1`、`Group2=1` 等 SDK 不报告的键，`parse_effect_chain()` 和 `inject_param_bakes()` 必须原样保留。
 10. **运动参数格式**：`位置=起点,终点,方法,保留|曲线` 为逗号分隔复合值，编辑起点/终点时其余字段原样保留。
+11. **相邻物件补偿须在输出帧域判定**：仅在 `next_sf - ef == 2`（输出帧域恰好 1 帧缝隙）时补平 `ef = next_sf - 1`。浮点域 `obj_fl += 1` 补偿在向上取整下会把亚帧缝误判成 1 帧缝，导致物件开头与上一物件结尾重叠。
+12. **AviUtl2 BPM 网格按向上取整画线**：物件帧取整必须与之一致（`use_round_up` 默认开启），关闭后在小数帧位置（如 30fps + 140BPM 的 12.86 帧/拍）物件会与网格错位一帧。
 
 ### UI 规则
 - 标签统一为中文，不加英文括号注释
