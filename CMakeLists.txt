@@ -134,3 +134,28 @@ set_source_files_properties(
 # add_executable(dump_clipboard
 #     tests/fixtures/dump_clipboard.cpp
 # )
+
+option(AUTOZWJ_BUILD_TESTS "Build parser and generation CLI tests" OFF)
+if(AUTOZWJ_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(autozwj_test_rpp
+        tests/test_rpp_parser.cpp
+        src/parsers/rpp/rpp_parser.cpp
+        src/codec/codec.cpp
+    )
+    target_include_directories(autozwj_test_rpp PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/aviutl2_sdk/include/aviutl2_sdk
+    )
+    add_test(NAME autozwj_test_rpp COMMAND autozwj_test_rpp)
+
+    add_executable(autozwj_test_generation
+        tests/test_generation.cpp
+    )
+    target_include_directories(autozwj_test_generation PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    target_link_libraries(autozwj_test_generation PRIVATE autozwj_core)
+    add_test(NAME autozwj_test_generation COMMAND autozwj_test_generation)
+endif()

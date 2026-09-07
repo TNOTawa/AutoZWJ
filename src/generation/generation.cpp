@@ -525,17 +525,35 @@ GenerationResult generate(const GenerationInput& in) {
 
                         if (obj_fp < 0) continue;
 
+                        int sf = (int)frame_round(obj_fp, config.use_round_up);
+                        if (sf < 1) sf = 1;
+
+                        // 拉伸到下一音符时，必须跳过同一输出帧内的和弦音符，
+                        // 否则同一和弦中只有最后一个音符会真正拉伸。
+                        double next_stretch_fp = next_fp;
+                        if (config.sync_mode == 1 && next_stretch_fp > 0) {
+                            next_stretch_fp = -1;
+                            for (size_t next = k + 1; next < i; next++) {
+                                if (objdict.pos[next] <= -0.5) break;
+                                double candidate_fp =
+                                    (objdict.pos[next] + config.base_time_sec) * fps + 1.0;
+                                int candidate_sf = (int)frame_round(candidate_fp, config.use_round_up);
+                                if (candidate_sf != sf) {
+                                    next_stretch_fp = candidate_fp;
+                                    break;
+                                }
+                            }
+                        }
+
                         double bf = obj_fp + obj_fl - 1;
 
                         bool stretch_next = (config.sync_mode == 1);
-                        if (stretch_next && next_fp > 0) {
+                        if (stretch_next && next_stretch_fp > 0) {
                             double rounded_bf = frame_round(bf, config.use_round_up);
-                            double rounded_next = frame_round(next_fp, config.use_round_up);
-                            if (rounded_bf < rounded_next - 1) bf = next_fp - 1;
+                            double rounded_next = frame_round(next_stretch_fp, config.use_round_up);
+                            if (rounded_bf < rounded_next - 1) bf = next_stretch_fp - 1;
                         }
 
-                        int sf = (int)frame_round(obj_fp, config.use_round_up);
-                        if (sf < 1) sf = 1;
                         int ef;
                         bool use_fixed = (config.sync_mode == 2 || config.sync_mode == 4);
                         if (use_fixed) {

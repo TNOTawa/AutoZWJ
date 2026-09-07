@@ -3,6 +3,7 @@
 #include "parsers/rpp/rpp_parser.h"
 #include "parsers/midi/midi_parser.h"
 #include "parsers/lrc/lrc_parser.h"
+#include "adapters/menu_registry.h"
 #include <algorithm>
 
 ParsedProject parse_source(const std::wstring& file_path) {
@@ -15,7 +16,12 @@ ParsedProject parse_source(const std::wstring& file_path) {
     EndWarnings warnings;
     bool ok = false;
     if (lower.find(".rpp") != std::string::npos) {
-        ok = parse_rpp_auto(path_utf8, result.objdict, result.tracks, result.file_paths, warnings);
+        RppParseMetadata metadata;
+        ok = parse_rpp_auto(path_utf8, result.objdict, result.tracks, result.file_paths,
+                            warnings, 0.0, 100000.0, &metadata);
+        if (ok && feature_registry_is_enabled(kFeatureParseRppXmidiNotes, false)) {
+            expand_rpp_xmidi_items(result.objdict, result.tracks, metadata);
+        }
     } else if (lower.find(".mid") != std::string::npos) {
         ok = parse_midi(path_utf8, result.objdict, result.tracks, result.file_paths);
     } else if (lower.find(".lrc") != std::string::npos) {

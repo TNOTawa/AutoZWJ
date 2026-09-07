@@ -141,9 +141,40 @@ static void test_gap_round_up() {
           "gap mode + ceil: note.start_frame var should match sf (32)");
 }
 
+// 用例：拉伸到下一音符时，同一输出帧的和弦音符必须共同拉伸到下一组音符。
+static void test_stretch_next_chord() {
+    auto objdict = make_objdict();
+    objdict.pos    = { -1.0, 0.0, 0.0, 0.5 };
+    objdict.length = {  0.0, 0.1, 0.1, 0.1 };
+    objdict.loop   = {    0,   0,   0,   0 };
+    objdict.soffs  = {  0.0, 0.0, 0.0, 0.0 };
+    objdict.pitch  = {  0.0, 0.0, 4.0, 7.0 };
+    objdict.playrate = { 1.0, 1.0, 1.0, 1.0 };
+    objdict.fileidx = { 0, 0, 0, 0 };
+    objdict.filetype = { "", "wav", "wav", "wav" };
+    objdict.filelist = { "dummy.wav", "test.wav" };
+
+    auto tracks = make_tracks();
+    tracks[0].count = 3;
+    auto templates = make_templates();
+    SceneInfo scene;
+    OutputConfig config;
+    config.sync_mode = 1;
+    config.use_round_up = true;
+
+    auto res = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
+    check(res.objects.size() == 3, "stretch-next chord: three objects expected");
+    check(res.objects[0].sf == 1 && res.objects[1].sf == 1,
+          "stretch-next chord: first two notes should share a start frame");
+    check(res.objects[0].ef == 30 && res.objects[1].ef == 30,
+          "stretch-next chord: all chord notes should stretch to the next note group");
+    check(res.objects[2].sf == 31, "stretch-next chord: next group start frame mismatch");
+}
+
 int main() {
     test_round_up();
     test_gap_round_up();
+    test_stretch_next_chord();
 
     auto objdict = make_objdict();
     auto tracks = make_tracks();
