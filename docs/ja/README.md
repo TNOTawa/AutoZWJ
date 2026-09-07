@@ -106,6 +106,12 @@ cmake --build build
 
 大規模な機能追加やアーキテクチャ変更については、実装を始める前にIssueで方針をご相談ください。
 
+<p align="center">
+  <a href="https://github.com/TNOTawa/AutoZWJ/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=tnotawa/autozwj" alt="コントリビューター">
+  </a>
+</p>
+
 ## Issueの報告
 
 問題や機能提案がある場合は、[Issues](https://github.com/TNOTawa/AutoZWJ/issues)から報告してください。可能な範囲で以下の情報を添えてください：
@@ -119,7 +125,16 @@ cmake --build build
 
 ## 寄付
 
-AutoZWJがお役に立ちましたら、継続的な開発を支援するための寄付をご検討ください。国内外プラットフォームの支払い用QRコードは後日追加予定です。
+AutoZWJがお役に立ちましたら、以下のプラットフォームから継続的な開発をご支援いただけます。
+
+<p align="center">
+  <a href="https://ifdian.net/a/tnotawa">
+    <img src="https://img.shields.io/badge/Afdian-Sponsor-946CE6?style=flat-square" alt="Afdianで支援">
+  </a>
+  <a href="https://tnot.fanbox.cc/">
+    <img src="https://img.shields.io/badge/pixivFANBOX-Sponsor-0096FA?style=flat-square" alt="pixivFANBOXで支援">
+  </a>
+</p>
 
 ## ライセンス
 

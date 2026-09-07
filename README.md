@@ -106,6 +106,12 @@ Contributions to AutoZWJ are welcome, including bug fixes, feature improvements,
 
 For major features or architectural changes, please discuss the proposal in an Issue before starting implementation.
 
+<p align="center">
+  <a href="https://github.com/TNOTawa/AutoZWJ/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=tnotawa/autozwj" alt="Contributors">
+  </a>
+</p>
+
 ## Reporting Issues
 
 If you encounter a problem or have a feature request, submit it through [Issues](https://github.com/TNOTawa/AutoZWJ/issues). Please include as much of the following information as possible:
@@ -119,7 +125,16 @@ Please search existing Issues before submitting to avoid duplicates.
 
 ## Donate
 
-If AutoZWJ is useful to you, donations are welcome to support its continued development. QR codes for domestic and international platforms will be added later.
+If AutoZWJ is useful to you, you can support its continued development through either platform below.
+
+<p align="center">
+  <a href="https://ifdian.net/a/tnotawa">
+    <img src="https://img.shields.io/badge/Afdian-Sponsor-946CE6?style=flat-square" alt="Support on Afdian">
+  </a>
+  <a href="https://tnot.fanbox.cc/">
+    <img src="https://img.shields.io/badge/pixivFANBOX-Sponsor-0096FA?style=flat-square" alt="Support on pixivFANBOX">
+  </a>
+</p>
 
 ## License
 
