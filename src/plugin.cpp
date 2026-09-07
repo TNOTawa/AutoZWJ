@@ -35,7 +35,7 @@ static uint32_t hash_string(const std::string& s) {
 
 COMMON_PLUGIN_TABLE common_plugin_table = {
     L"AutoZWJ",
-    L"AutoZWJ - RPP/MIDI to AviUtl2 object importer",
+    L"AutoZWJ - RPP/MIDI/UTAU to AviUtl2 object importer",
 };
 
 EXTERN_C __declspec(dllexport) COMMON_PLUGIN_TABLE* GetCommonPluginTable(void) {
@@ -358,7 +358,7 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
 
     static std::wstring s_menu_config = utf8_to_wide(tr_str(u8"配置导入..."));
     host->register_object_menu(s_menu_config.c_str(), on_open_config);
-    host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI Input", L"*.rpp;*.mid", on_file_drop);
+    host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI/UTAU Input", L"*.rpp;*.mid;*.midi;*.ust;*.ustx", on_file_drop);
     up_register_menu(host);
 
     g_host.edit_handle = host->create_edit_handle();

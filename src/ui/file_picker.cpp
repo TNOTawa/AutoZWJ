@@ -10,9 +10,9 @@ void show_file_picker(HWND parent, std::function<void(const std::wstring&)> on_s
     wchar_t path_buffer[MAX_PATH * 2] = {};
 
     std::wstring filter;
-    filter += utf8_to_wide(tr_str(u8"REAPER/MIDI Files"));
+    filter += utf8_to_wide(tr_str(u8"RPP/MIDI/UTAU Files"));
     filter += L'\0';
-    filter += L"*.rpp;*.mid";
+    filter += L"*.rpp;*.mid;*.midi;*.ust;*.ustx";
     filter += L'\0';
     filter += L"RPP Files";
     filter += L'\0';
@@ -21,6 +21,10 @@ void show_file_picker(HWND parent, std::function<void(const std::wstring&)> on_s
     filter += L"MIDI Files";
     filter += L'\0';
     filter += L"*.mid";
+    filter += L'\0';
+    filter += L"UTAU Files";
+    filter += L'\0';
+    filter += L"*.ust;*.ustx";
     filter += L'\0';
     filter += L"All Files";
     filter += L'\0';

@@ -2,6 +2,7 @@
 
 > 项目名称：AutoZWJ
 > 类型：`.aux2` 泛用插件
+> 定位：音MAD对轨插件（英文语境统一写作 Otomad）
 > 功能：将 REAPER `.rpp` / MIDI `.mid` 工程以现有物件为模板批量导入 AviUtl2 时间轴
 > 状态：核心功能已闭环（Phase 1~7 + 脚本系统完成 + BPM 网格工具）
 
@@ -34,7 +35,7 @@ src/
 ├── tools/
 │   └── tempo/tempo_apply.h/cpp     # BPM 网格同步工具（增强非必要功能）
 ├── version.rc.in                   # VERSIONINFO 产物元数据模板（版本/作者 TNOTawa）
-└── thirdparty/imgui/               # Dear ImGui docking 分支（git 子模块）
+└── thirdparty/imgui/               # Dear ImGui docking 分支（内联源码，固定版本）
 ```
 
 ---
@@ -104,10 +105,10 @@ src/
 - 使用 g++ 15.2.0 或更新版本
 - 构建自包含的静态 DLL
 
-### 依赖（git 子模块）
-- `aviutl2_sdk` —— AviUtl2 SDK 镜像仓库（头文件根为 `include/aviutl2_sdk/`，CMake include 指向该子目录）
-- `src/thirdparty/imgui` —— Dear ImGui docking 分支
-- 首次克隆后需执行 `git submodule update --init --recursive`
+### 依赖
+- `aviutl2_sdk` —— AviUtl2 SDK 镜像仓库（git 子模块，`branch = main` 跟踪上游；`.github/workflows/sync-sdk.yml` 每周自动同步并验证构建。头文件根为 `include/aviutl2_sdk/`，CMake include 指向该子目录）
+- `src/thirdparty/imgui` —— Dear ImGui docking 分支内联源码（固定版本，来源与许可见 `src/thirdparty/imgui/VENDOR.md`）
+- 首次克隆后需执行 `git submodule update --init`
 
 ### 构建命令
 
@@ -163,6 +164,7 @@ cmake --build build
 4. **旧路径存活到新路径切过去那天** — 新版就绪后再删除旧代码
 5. **MVP 优先** — 尽早交付可用产出
 6. **权限放开** — 不做预判性限制，用户自主判断值的合法性
+7. **文档以中文为准** — README 体系的唯一事实来源是 `docs/zh/README.md`；需要中间验证时先出中文版，用户确认后再翻译为 English / 日本語。每份 README 的 logo（`docs/images/logo.svg`）居中放在语言切换行与主标题之间；术语：英文语境「音MAD」统一写作 Otomad，软件定位为「音MAD对轨插件」
 
 ---
 

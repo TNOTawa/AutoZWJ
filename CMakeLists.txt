@@ -67,6 +67,8 @@ add_library(AutoZWJ SHARED
     src/i18n/i18n.cpp
     src/parsers/rpp/rpp_parser.cpp
     src/parsers/midi/midi_parser.cpp
+    src/parsers/ust/ust_parser.cpp
+    src/parsers/ustx/ustx_parser.cpp
     src/parsers/lrc/lrc_parser.cpp
     src/tools/tempo/tempo_apply.cpp
     src/tools/up/up.cpp
@@ -129,6 +131,32 @@ set_source_files_properties(
 # target_link_libraries(autozwj_test_up PRIVATE
 #     autozwj_core
 # )
+
+# ---- autozwj_test_ust: UST/USTX 解析器 CLI 测试 ----
+add_executable(autozwj_test_ust
+    tests/test_ust_parsers.cpp
+    src/parsers/ust/ust_parser.cpp
+    src/parsers/ustx/ustx_parser.cpp
+)
+target_include_directories(autozwj_test_ust PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+target_link_libraries(autozwj_test_ust PRIVATE
+    autozwj_core
+)
+
+# ---- autozwj_test_rpp: RPP marker parser CLI tests ----
+add_executable(autozwj_test_rpp
+    tests/test_rpp_parser.cpp
+    src/parsers/rpp/rpp_parser.cpp
+)
+target_include_directories(autozwj_test_rpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/aviutl2_sdk/include/aviutl2_sdk
+)
+target_link_libraries(autozwj_test_rpp PRIVATE
+    autozwj_core
+)
 
 # ---- dump_clipboard: 剪贴板 REAPERMedia 数据导出工具（测试夹具采集用） ----
 # add_executable(dump_clipboard

@@ -1,0 +1,59 @@
+name: 同步 SDK 上游
+
+on:
+  schedule:
+    - cron: '0 1 * * 1' # 每周一 01:00 UTC（北京时间 09:00）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+
+      - name: 拉取上游最新 aviutl2_sdk
+        id: pull
+        run: |
+          git submodule update --remote aviutl2_sdk
+          old=$(git ls-tree HEAD aviutl2_sdk | awk '{print $3}')
+          new=$(git -C aviutl2_sdk rev-parse HEAD)
+          echo "old=$old  new=$new"
+          if [ "$old" = "$new" ]; then
+            echo "上游无变化，跳过"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 构建验证
+        if: steps.pull.outputs.changed == 'true'
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: 提交并推送
+        if: steps.pull.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add aviutl2_sdk
+          git commit -m "chore(deps): Sync aviutl2_sdk to upstream $(git -C aviutl2_sdk rev-parse --short HEAD)"
+          git push

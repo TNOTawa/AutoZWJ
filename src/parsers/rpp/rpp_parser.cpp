@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 
 #ifdef ERROR
 #undef ERROR
@@ -36,6 +37,52 @@ static std::vector<std::string> split_line(const std::string& line) {
     std::string part;
     while (iss >> part) parts.push_back(part);
     return parts;
+}
+
+static bool read_rpp_token(const std::string& line, size_t& pos, std::string& token) {
+    while (pos < line.size() && (unsigned char)line[pos] <= 0x20) pos++;
+    if (pos >= line.size()) return false;
+
+    token.clear();
+    if (line[pos] != '"') {
+        size_t start = pos;
+        while (pos < line.size() && (unsigned char)line[pos] > 0x20) pos++;
+        token = line.substr(start, pos - start);
+        return true;
+    }
+
+    pos++;
+    while (pos < line.size()) {
+        char c = line[pos++];
+        if (c == '"') return true;
+        if (c == '\\' && pos < line.size()) {
+            char escaped = line[pos];
+            if (escaped == '"' || escaped == '\\') {
+                token.push_back(escaped);
+                pos++;
+                continue;
+            }
+        }
+        token.push_back(c);
+    }
+    return true;
+}
+
+static bool parse_marker_line(const std::string& line, MarkerPoint& marker) {
+    size_t pos = 0;
+    std::string token;
+    if (!read_rpp_token(line, pos, token) || token != "MARKER") return false;
+    if (!read_rpp_token(line, pos, token)) return false; // marker id
+    if (!read_rpp_token(line, pos, token)) return false; // position in seconds
+
+    char* end = nullptr;
+    double time_sec = std::strtod(token.c_str(), &end);
+    if (end == token.c_str() || *end != '\0' || !std::isfinite(time_sec)) return false;
+
+    std::string memo;
+    if (!read_rpp_token(line, pos, memo)) memo.clear();
+    marker = {time_sec, maybe_cp932_to_utf8(memo)};
+    return true;
 }
 
 static std::string dirname(const std::string& path) {
@@ -133,6 +180,13 @@ bool parse_rpp(const std::string& path, ObjDict& objdict,
 
     while (index < num_lines) {
         auto parts = split_line(lines[index]);
+
+        if (!parts.empty() && parts[0] == "MARKER") {
+            MarkerPoint marker;
+            if (parse_marker_line(lines[index], marker)) {
+                objdict.markers.push_back(std::move(marker));
+            }
+        }
 
         if (!parts.empty() && parts[0] == "TEMPO" && parts.size() >= 3) {
             header_bpm = std::atof(parts[1].c_str());

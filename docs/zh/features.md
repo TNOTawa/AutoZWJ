@@ -6,6 +6,8 @@
 |------|--------|------|
 | REAPER 工程 | `.rpp` | 支持轨道文件夹层级、音视频素材、SECTION LOOP、TEXT/NOTES |
 | 标准 MIDI | `.mid` | 支持多轨道、CC7 Volume、CC10 Pan、PitchBend、Tempo 变化 |
+| UTAU 工程 | `.ust` | 支持 UST 1.x/2.0 音符、休止符过滤、音符速度、Tempo 变化 |
+| OpenUTAU 工程 | `.ustx` | 支持多轨道、多 Voice Part、音符位置/音高/歌词、`vel` 表达式和 Tempo 变化 |
 | LRC 歌词 | `.lrc` | 支持 `[mm:ss.xx]` / `[mm:ss:xx]` 时间戳、一行多时间点、JSON 行过滤 |
 
 ---
@@ -161,13 +163,13 @@ primary  = number | identifier [ "(" args ")" ] | "(" expr ")"
 
 ## 文件拖放支持
 
-插件注册了文件拖放处理器，支持将工程文件直接拖入 AviUtl2 窗口自动解析。若拖放无反应，请到 `设置 - 导入插件设置` 中确认 `.rpp` / `.mid` 已列入受支持的文件类型。拖放后会自动将文件加入历史记录。
+插件注册了文件拖放处理器，支持将 `.rpp` / `.mid` / `.ust` / `.ustx` 工程文件直接拖入 AviUtl2 窗口自动解析。若拖放无反应，请到 `设置 - 导入插件设置` 中确认这些扩展名已列入受支持的文件类型。拖放后会自动将文件加入历史记录。
 
 ---
 
 ## BPM 网格同步工具
 
-`tools/tempo/tempo_apply.cpp` 实现了从解析后的 tempo map 到 AviUtl2 `set_grid_bpm_list` 的桥接：
+`tools/tempo/tempo_apply.cpp` 实现了从解析后的 tempo map 和 RPP `MARKER` 到 AviUtl2 `set_grid_bpm_list` / `set_mark_frame` 的桥接：
 
 ### Tempo Map 统一转换
 
@@ -177,6 +179,7 @@ primary  = number | identifier [ "(" args ")" ] | "(" expr ")"
 - `offset` 恒为 0，每个 tempo 点从自身 `start` 起按 `beat` 生成拍线
 - 同时间点多事件时，拍号优先于 tempo
 - 基准时间偏移叠加到每个 `BPM_INFO.start` 上
+- RPP 标记点按相同的基准时间、场景帧率和帧取整设置写入时间轴，名称转换为标记备忘录
 
 ### 触发方式
 

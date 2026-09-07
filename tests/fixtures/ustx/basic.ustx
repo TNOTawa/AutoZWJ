@@ -1,0 +1,81 @@
+ustx_version: 0.9
+name: AutoZWJ USTX Test
+comment: ''
+output_dir: Vocal
+cache_dir: UCache
+expressions: {}
+exp_selectors: [dyn, pitd, clr, eng, vel, vol, atk, dec, gen, bre]
+exp_primary: 0
+exp_secondary: 1
+key: 0
+time_signatures:
+- {bar_position: 0, beat_per_bar: 4, beat_unit: 4}
+tempos:
+- {position: 0, bpm: 100}
+- {position: 960, bpm: 200}
+tracks:
+- singer: null
+  phonemizer: OpenUtau.Core.DefaultPhonemizer
+  track_name: Voice A
+  track_color: Blue
+  mute: false
+  solo: false
+  volume: 0
+  pan: 0
+  track_expressions: []
+- singer: null
+  phonemizer: OpenUtau.Core.DefaultPhonemizer
+  track_name: Voice B
+  track_color: Red
+  mute: false
+  solo: false
+  volume: 0
+  pan: 0
+  track_expressions: []
+voice_parts:
+- name: Part A
+  comment: ''
+  track_no: 0
+  position: 0
+  duration: 960
+  notes:
+  - position: 0
+    duration: 480
+    tone: 60
+    lyric: a
+    pitch:
+      data: []
+      snap_first: true
+    vibrato: {length: 0, period: 175, depth: 25, in: 10, out: 10, shift: 0, drift: 0, vol_link: 0}
+    tuning: 0
+    phoneme_expressions:
+    - {index: 0, abbr: vel, value: 77}
+    phoneme_overrides: []
+  - position: 480
+    duration: 480
+    tone: 62
+    lyric: i
+    pitch:
+      data: []
+      snap_first: true
+    vibrato: {length: 0, period: 175, depth: 25, in: 10, out: 10, shift: 0, drift: 0, vol_link: 0}
+    tuning: 25
+    phoneme_expressions: []
+    phoneme_overrides: []
+- name: Part B
+  comment: ''
+  track_no: 1
+  position: 960
+  duration: 480
+  notes:
+  - position: 0
+    duration: 480
+    tone: 65
+    lyric: u
+    pitch:
+      data: []
+      snap_first: true
+    vibrato: {length: 0, period: 175, depth: 25, in: 10, out: 10, shift: 0, drift: 0, vol_link: 0}
+    tuning: 0
+    phoneme_expressions: []
+    phoneme_overrides: []
