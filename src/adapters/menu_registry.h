@@ -11,6 +11,16 @@ struct MenuEntry {
     bool enabled = true;
 };
 
+// 非菜单类的全局功能开关，同样持久化到 AutoZWJ.menu.ini。
+struct FeatureEntry {
+    std::string id;
+    std::string label_key;
+    bool enabled = false;
+};
+
+inline constexpr const char* kFeatureParseRppXmidiNotes = "parser.rpp_xmidi_notes";
+inline constexpr const char* kFeatureParseRppXmidiNotesLabel = "将XMIDI物件按音符解析";
+
 // 注册表内存态
 std::vector<MenuEntry>& menu_registry_all();
 
@@ -25,3 +35,9 @@ void menu_registry_load(const std::wstring& app_data_dir);
 
 // 将当前注册表状态写回 AutoZWJ.menu.ini（须先调用 load）
 void menu_registry_save();
+
+// 全局功能开关注册表
+std::vector<FeatureEntry>& feature_registry_all();
+void feature_registry_upsert(const std::string& id, const std::string& label_key, bool default_enabled);
+bool feature_registry_is_enabled(const std::string& id, bool default_enabled = false);
+void feature_registry_save();

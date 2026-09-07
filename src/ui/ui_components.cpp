@@ -373,7 +373,7 @@ void render_nav_bar() {
         ImGui::EndPopup();
     }
 
-    // 功能开关页面：右键菜单注册项开关（重启 AviUtl2 后生效）
+    // 功能开关页面：右键菜单注册项与解析功能开关
     if (g_show_feature_switches) {
         g_show_feature_switches = false;
         ImGui::OpenPopup(tr(u8"功能开关页面"));
@@ -382,16 +382,35 @@ void render_nav_bar() {
         ImGui::Text("%s", tr(u8"右键菜单注册项"));
         ImGui::Separator();
 
-        bool changed = false;
+        bool menu_changed = false;
         for (auto& e : menu_registry_all()) {
             bool enabled = e.enabled;
             if (ImGui::Checkbox(tr(e.label_key.c_str()), &enabled)) {
                 e.enabled = enabled;
-                changed = true;
+                menu_changed = true;
             }
         }
-        if (changed) {
+        if (menu_changed) {
             menu_registry_save();
+        }
+
+        if (!feature_registry_all().empty()) {
+            ImGui::Spacing();
+            ImGui::Text("%s", tr(u8"解析功能"));
+            ImGui::Separator();
+
+            bool feature_changed = false;
+            for (auto& e : feature_registry_all()) {
+                bool enabled = e.enabled;
+                if (ImGui::Checkbox(tr(e.label_key.c_str()), &enabled)) {
+                    e.enabled = enabled;
+                    feature_changed = true;
+                }
+            }
+            if (feature_changed) {
+                feature_registry_save();
+            }
+            ImGui::TextDisabled("%s", tr(u8"解析功能设置在下次导入工程时生效"));
         }
 
         ImGui::Separator();

@@ -162,3 +162,23 @@ target_link_libraries(autozwj_test_rpp PRIVATE
 # add_executable(dump_clipboard
 #     tests/fixtures/dump_clipboard.cpp
 # )
+
+option(AUTOZWJ_BUILD_TESTS "Build parser and generation CLI tests" OFF)
+if(AUTOZWJ_BUILD_TESTS)
+    enable_testing()
+
+    add_test(NAME autozwj_test_rpp COMMAND autozwj_test_rpp)
+    add_test(NAME autozwj_test_ust COMMAND autozwj_test_ust)
+    set_tests_properties(autozwj_test_rpp autozwj_test_ust PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+
+    add_executable(autozwj_test_generation
+        tests/test_generation.cpp
+    )
+    target_include_directories(autozwj_test_generation PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    target_link_libraries(autozwj_test_generation PRIVATE autozwj_core)
+    add_test(NAME autozwj_test_generation COMMAND autozwj_test_generation)
+endif()
