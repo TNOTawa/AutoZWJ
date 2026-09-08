@@ -611,7 +611,10 @@ static void emit_animation_sequence(
 
     const auto order = animation_sequence_order(templates);
     const double source_sf = templates[order.front()].source.sf;
-    const double source_ef = templates[order.back()].source.ef;
+    double source_ef = source_sf;
+    for (const auto& tpl : templates) {
+        source_ef = std::max(source_ef, static_cast<double>(tpl.source.ef));
+    }
     const int min_layer = animation_sequence_min_layer(templates);
 
     for (size_t sequence_index = 0; sequence_index < order.size(); sequence_index++) {

@@ -398,6 +398,7 @@ static std::vector<RppMidiNote> decode_rpp_midi_notes(
         active_tempo_map = &local_tempo_map;
     }
 
+    const bool reverse = playrate < -1e-9;
     double rate = std::abs(playrate) > 1e-9 ? std::abs(playrate) : 1.0;
     double item_end = item_position + std::max(item_length, 0.0);
     double source_item_end = source_offset_sec +
@@ -409,10 +410,16 @@ static std::vector<RppMidiNote> decode_rpp_midi_notes(
             ? seconds_after_beats(0.0, static_cast<double>(note.end_tick) / source.ppq, *active_tempo_map)
             : source_item_end;
 
+        double output_start = start_source_sec;
+        double output_end = end_source_sec;
+        if (reverse) {
+            output_start = source_item_end - end_source_sec;
+            output_end = source_item_end - start_source_sec;
+        }
         note.pos_sec = item_position +
-            (start_source_sec - source_offset_sec) / rate;
+            (output_start - source_offset_sec) / rate;
         double end_sec = item_position +
-            (end_source_sec - source_offset_sec) / rate;
+            (output_end - source_offset_sec) / rate;
         if (end_sec <= item_position || note.pos_sec >= item_end) {
             note.length_sec = 0.0;
             continue;
@@ -852,13 +859,13 @@ static void append_objdict_item(const ObjDict& source, size_t index, ObjDict& ta
 }
 
 static void append_rpp_note_item(const RppMidiNote& note, double output_offset_sec,
-                                 ObjDict& target) {
+                                 double playrate, ObjDict& target) {
     target.pos.push_back(note.pos_sec - output_offset_sec);
     target.length.push_back(note.length_sec);
     target.loop.push_back(0);
     target.soffs.push_back(0.0);
     target.pitch.push_back(static_cast<double>(note.note - 69));
-    target.playrate.push_back(1.0);
+    target.playrate.push_back(playrate);
     target.fileidx.push_back(-1);
     target.filetype.push_back("XMIDI");
     target.midi_note.push_back(note.note);
@@ -913,7 +920,7 @@ void expand_rpp_xmidi_items(ObjDict& objdict, std::vector<TrackNode>& tracks,
                 int appended = 0;
                 for (const auto& note : notes) {
                     if (note.length_sec <= 0.0) continue;
-                    append_rpp_note_item(note, metadata.start_pos_sec, expanded);
+                    append_rpp_note_item(note, metadata.start_pos_sec, playrate, expanded);
                     appended++;
                 }
                 if (appended > 0) {

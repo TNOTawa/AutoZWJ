@@ -139,6 +139,53 @@ static void test_note_mode(const std::string& path) {
     check(close_to(objdict.tempo_map[0].bpm, 120.0), "tempo map BPM mismatch");
 }
 
+
+static void test_reverse_note_mode() {
+    auto path = std::filesystem::temp_directory_path() / "autozwj_rpp_reverse_xmidi_test.rpp";
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    check(file.good(), "reverse fixture file should be writable");
+    file << R"RPP(<REAPER_PROJECT 0.1 "7.0" 0
+TEMPO 120 4 4
+<TRACK
+NAME "Reverse"
+ISBUS 0
+<ITEM
+POSITION 10
+LENGTH 2
+PLAYRATE -1 0 0
+SOFFS 0.25
+<SOURCE MIDI
+HASDATA 1 480 QN
+E 0 90 3c 64
+E 480 80 3c 00
+E 480 90 40 64
+E 480 80 40 00
+>
+>
+>
+>
+)RPP";
+    file.close();
+
+    ObjDict objdict;
+    std::vector<TrackNode> tracks;
+    std::vector<std::string> file_paths;
+    EndWarnings warnings;
+    RppParseMetadata metadata;
+    check(parse_rpp(path.string(), objdict, tracks, file_paths, warnings,
+                    0.0, 100000.0, nullptr, &metadata),
+          "reverse RPP should parse");
+    expand_rpp_xmidi_items(objdict, tracks, metadata);
+    check(tracks[0].count == 2, "reverse RPP should produce two notes");
+    check(close_to(objdict.pos[1], 10.5), "reverse first note position mismatch");
+    check(close_to(objdict.pos[2], 11.5), "reverse second note position mismatch");
+    check(close_to(objdict.playrate[1], -1.0) && close_to(objdict.playrate[2], -1.0),
+          "reverse note playrate should be preserved");
+
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
 static int inspect_project(const std::string& path) {
     ObjDict objdict;
     std::vector<TrackNode> tracks;
@@ -286,6 +333,7 @@ int main(int argc, char** argv) {
 
     test_midi_block_mode(path_utf8);
     test_note_mode(path_utf8);
+    test_reverse_note_mode();
     test_markers();
 
     const std::string duida_path = "G:\\KOOK_BOT\\aul2\\test_duida.rpp";

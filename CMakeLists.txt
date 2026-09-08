@@ -134,32 +134,6 @@ set_source_files_properties(
 #     autozwj_core
 # )
 
-# ---- autozwj_test_ust: UST/USTX 解析器 CLI 测试 ----
-add_executable(autozwj_test_ust
-    tests/test_ust_parsers.cpp
-    src/parsers/ust/ust_parser.cpp
-    src/parsers/ustx/ustx_parser.cpp
-)
-target_include_directories(autozwj_test_ust PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-)
-target_link_libraries(autozwj_test_ust PRIVATE
-    autozwj_core
-)
-
-# ---- autozwj_test_rpp: RPP marker parser CLI tests ----
-add_executable(autozwj_test_rpp
-    tests/test_rpp_parser.cpp
-    src/parsers/rpp/rpp_parser.cpp
-)
-target_include_directories(autozwj_test_rpp PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/aviutl2_sdk/include/aviutl2_sdk
-)
-target_link_libraries(autozwj_test_rpp PRIVATE
-    autozwj_core
-)
-
 # ---- dump_clipboard: 剪贴板 REAPERMedia 数据导出工具（测试夹具采集用） ----
 # add_executable(dump_clipboard
 #     tests/fixtures/dump_clipboard.cpp
@@ -168,6 +142,30 @@ target_link_libraries(autozwj_test_rpp PRIVATE
 option(AUTOZWJ_BUILD_TESTS "Build parser and generation CLI tests" OFF)
 if(AUTOZWJ_BUILD_TESTS)
     enable_testing()
+
+    add_executable(autozwj_test_ust
+        tests/test_ust_parsers.cpp
+        src/parsers/ust/ust_parser.cpp
+        src/parsers/ustx/ustx_parser.cpp
+    )
+    target_include_directories(autozwj_test_ust PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    target_link_libraries(autozwj_test_ust PRIVATE
+        autozwj_core
+    )
+
+    add_executable(autozwj_test_rpp
+        tests/test_rpp_parser.cpp
+        src/parsers/rpp/rpp_parser.cpp
+    )
+    target_include_directories(autozwj_test_rpp PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/aviutl2_sdk/include/aviutl2_sdk
+    )
+    target_link_libraries(autozwj_test_rpp PRIVATE
+        autozwj_core
+    )
 
     add_test(NAME autozwj_test_rpp COMMAND autozwj_test_rpp)
     add_test(NAME autozwj_test_ust COMMAND autozwj_test_ust)
