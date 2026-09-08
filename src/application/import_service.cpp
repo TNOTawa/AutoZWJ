@@ -5,7 +5,7 @@
 #include "parsers/ust/ust_parser.h"
 #include "parsers/ustx/ustx_parser.h"
 #include "parsers/lrc/lrc_parser.h"
-#include "adapters/menu_registry.h"
+#include "core/preferences.h"
 #include <algorithm>
 
 ParsedProject parse_source(const std::wstring& file_path) {
@@ -24,7 +24,7 @@ ParsedProject parse_source(const std::wstring& file_path) {
         RppParseMetadata metadata;
         ok = parse_rpp_auto(path_utf8, result.objdict, result.tracks, result.file_paths,
                             warnings, 0.0, 100000.0, &metadata);
-        if (ok && feature_registry_is_enabled(kFeatureParseRppXmidiNotes, false)) {
+        if (ok && preferences().parse_rpp_xmidi_notes) {
             expand_rpp_xmidi_items(result.objdict, result.tracks, metadata);
         }
     } else if (extension == ".mid" || extension == ".midi") {

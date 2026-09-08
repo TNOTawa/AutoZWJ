@@ -9,3 +9,5 @@ void imgui_window_shutdown();
 void imgui_window_set_generate_callback(bool (*cb)());
 bool imgui_window_trigger_generate();
 void imgui_window_show_import_page();
+void imgui_window_show_preferences();
+void imgui_window_apply_preferences();

@@ -73,6 +73,7 @@ add_library(AutoZWJ SHARED
     src/tools/tempo/tempo_apply.cpp
     src/tools/up/up.cpp
     src/adapters/menu_registry.cpp
+    src/adapters/preferences_store.cpp
     src/application/import_service.cpp
     src/application/project_controller.cpp
     src/adapters/project_file_store.cpp

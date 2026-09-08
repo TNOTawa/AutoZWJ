@@ -14,6 +14,7 @@
 #include "generation/generation.h"
 #include "codec/codec.h"
 #include "adapters/menu_registry.h"
+#include "core/preferences.h"
 #include "tools/up/up.h"
 #include <algorithm>
 #include <sstream>
@@ -109,9 +110,8 @@ EXTERN_C __declspec(dllexport) void InitializeConfig(CONFIG_HANDLE* config) {
     i18n_set_host_lang_detector(detect_aviutl2_lang);
     if (config && config->app_data_path) {
         menu_registry_load(config->app_data_path);
+        preferences_load(config->app_data_path);
     }
-    feature_registry_upsert(kFeatureParseRppXmidiNotes,
-        kFeatureParseRppXmidiNotesLabel, true);
 }
 
 EXTERN_C __declspec(dllexport) bool InitializePlugin(DWORD version) {
@@ -358,10 +358,62 @@ void sync_scene_info() {
     g_app.project.config.fps_den = info.scale;
 }
 
+bool host_get_default_font(std::wstring& name) {
+    if (!g_config_handle || !g_config_handle->get_font_info) return false;
+    FONT_INFO* info = g_config_handle->get_font_info(g_config_handle, "Default");
+    if (!info || !info->name || !info->name[0]) return false;
+    name = info->name;
+    return true;
+}
+
+bool host_font_supports_cjk(const std::wstring& name) {
+    if (name.empty()) return false;
+    HDC dc = GetDC(nullptr);
+    if (!dc) return false;
+    HFONT font = CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+        DEFAULT_PITCH, name.c_str());
+    if (!font) {
+        ReleaseDC(nullptr, dc);
+        return false;
+    }
+    HGDIOBJ old = SelectObject(dc, font);
+    DWORD bytes = GetFontUnicodeRanges(dc, nullptr);
+    std::vector<BYTE> data(bytes);
+    bool supported = false;
+    if (bytes > 0) {
+        auto* ranges = reinterpret_cast<GLYPHSET*>(data.data());
+        ranges->cbThis = bytes;
+        if (GetFontUnicodeRanges(dc, ranges)) {
+            const wchar_t required[] = { L'中', L'文', L'日', L'本', L'あ', L'ア' };
+            supported = true;
+            for (wchar_t codepoint : required) {
+                bool found = false;
+                for (DWORD i = 0; i < ranges->cRanges && !found; i++) {
+                    const WCRANGE& range = ranges->ranges[i];
+                    found = codepoint >= range.wcLow && codepoint < range.wcLow + range.cGlyphs;
+                }
+                if (!found) {
+                    supported = false;
+                    break;
+                }
+            }
+        }
+    }
+    SelectObject(dc, old);
+    DeleteObject(font);
+    ReleaseDC(nullptr, dc);
+    return supported;
+}
+
+static void on_open_preferences(HWND, HINSTANCE) {
+    imgui_window_show_preferences();
+}
+
 EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     HMODULE dll_hinst = nullptr;
     GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         reinterpret_cast<LPCWSTR>(&RegisterPlugin),
         &dll_hinst);
     g_host.dll_hinst = dll_hinst;
@@ -371,6 +423,8 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     static constexpr wchar_t k_file_drop_filter[] =
         L"RPP/MIDI/UTAU Files\0*.rpp;*.mid;*.midi;*.ust;*.ustx\0";
     host->register_object_menu(s_menu_config.c_str(), on_open_config);
+    static std::wstring s_menu_preferences = utf8_to_wide(tr_str(u8"首选项..."));
+    host->register_config_menu(s_menu_preferences.c_str(), on_open_preferences);
     host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI/UTAU Input", k_file_drop_filter, on_file_drop);
     up_register_menu(host);
 

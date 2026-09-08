@@ -40,4 +40,5 @@ void menu_registry_save();
 std::vector<FeatureEntry>& feature_registry_all();
 void feature_registry_upsert(const std::string& id, const std::string& label_key, bool default_enabled);
 bool feature_registry_is_enabled(const std::string& id, bool default_enabled = false);
+bool feature_registry_saved_state(const std::string& id, bool& enabled);
 void feature_registry_save();

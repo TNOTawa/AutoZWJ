@@ -107,6 +107,13 @@ bool feature_registry_is_enabled(const std::string& id, bool default_enabled) {
     return it != g_saved_feature_states.end() ? it->second : default_enabled;
 }
 
+bool feature_registry_saved_state(const std::string& id, bool& enabled) {
+    auto it = g_saved_feature_states.find(id);
+    if (it == g_saved_feature_states.end()) return false;
+    enabled = it->second;
+    return true;
+}
+
 void feature_registry_save() {
     if (g_ini_path.empty()) return;
     for (const auto& e : g_features) {
