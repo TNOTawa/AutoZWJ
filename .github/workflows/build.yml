@@ -39,10 +39,20 @@ jobs:
           fi
 
       - name: 配置（Release）
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DAUTOZWJ_BUILD_TESTS=ON
 
       - name: 构建
         run: cmake --build build
+
+      - name: 测试
+        run: ctest --test-dir build --output-on-failure
+
+      - name: 校验 Catalog 发布资产
+        run: |
+          if [ ! -s build/AutoZWJ.aux2 ]; then
+            echo "错误：build/AutoZWJ.aux2 不存在或为空"
+            exit 1
+          fi
 
       - name: 发布 Release
         uses: softprops/action-gh-release@v3
