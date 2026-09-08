@@ -1,7 +1,4 @@
 [submodule "aviutl2_sdk"]
 	path = aviutl2_sdk
 	url = https://github.com/aviutl2/aviutl2_sdk_mirror.git
-[submodule "src/thirdparty/imgui"]
-	path = src/thirdparty/imgui
-	url = https://github.com/ocornut/imgui.git
-	branch = docking
+	branch = main

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AutoZWJ VERSION 0.2.7 LANGUAGES CXX)
+project(AutoZWJ VERSION 0.3.0 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -67,13 +67,17 @@ add_library(AutoZWJ SHARED
     src/i18n/i18n.cpp
     src/parsers/rpp/rpp_parser.cpp
     src/parsers/midi/midi_parser.cpp
+    src/parsers/ust/ust_parser.cpp
+    src/parsers/ustx/ustx_parser.cpp
     src/parsers/lrc/lrc_parser.cpp
     src/tools/tempo/tempo_apply.cpp
     src/tools/up/up.cpp
     src/adapters/menu_registry.cpp
+    src/adapters/preferences_store.cpp
     src/application/import_service.cpp
     src/application/project_controller.cpp
     src/adapters/project_file_store.cpp
+    src/autozwj.rc
     ${CMAKE_BINARY_DIR}/version.rc
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
@@ -134,3 +138,47 @@ set_source_files_properties(
 # add_executable(dump_clipboard
 #     tests/fixtures/dump_clipboard.cpp
 # )
+
+option(AUTOZWJ_BUILD_TESTS "Build parser and generation CLI tests" OFF)
+if(AUTOZWJ_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(autozwj_test_ust
+        tests/test_ust_parsers.cpp
+        src/parsers/ust/ust_parser.cpp
+        src/parsers/ustx/ustx_parser.cpp
+    )
+    target_include_directories(autozwj_test_ust PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    target_link_libraries(autozwj_test_ust PRIVATE
+        autozwj_core
+    )
+
+    add_executable(autozwj_test_rpp
+        tests/test_rpp_parser.cpp
+        src/parsers/rpp/rpp_parser.cpp
+    )
+    target_include_directories(autozwj_test_rpp PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/aviutl2_sdk/include/aviutl2_sdk
+    )
+    target_link_libraries(autozwj_test_rpp PRIVATE
+        autozwj_core
+    )
+
+    add_test(NAME autozwj_test_rpp COMMAND autozwj_test_rpp)
+    add_test(NAME autozwj_test_ust COMMAND autozwj_test_ust)
+    set_tests_properties(autozwj_test_rpp autozwj_test_ust PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+
+    add_executable(autozwj_test_generation
+        tests/test_generation.cpp
+    )
+    target_include_directories(autozwj_test_generation PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    target_link_libraries(autozwj_test_generation PRIVATE autozwj_core)
+    add_test(NAME autozwj_test_generation COMMAND autozwj_test_generation)
+endif()

@@ -34,6 +34,7 @@ struct GeneratedObject {
     ObjNameKind name_kind = ObjNameKind::Item;
     std::string name_text;
     int name_index = 0;
+    int name_sub_index = 0;
 };
 
 struct TemplateSession {

@@ -15,6 +15,35 @@
 AppPage g_current_page = AppPage::Config;
 static bool g_show_no_project_popup = false;
 static bool g_show_feature_switches = false;
+static bool g_show_preferences = false;
+static void render_preferences_popup();
+static bool g_show_preferences_reset_confirm = false;
+static std::vector<std::wstring> g_available_fonts;
+static bool g_available_fonts_loaded = false;
+
+void request_preferences_popup() {
+    g_show_preferences = true;
+}
+
+struct FontEnumContext {
+    std::vector<std::wstring>* fonts;
+};
+
+static void enum_font_callback(void* param, LPCWSTR name) {
+    auto* ctx = static_cast<FontEnumContext*>(param);
+    if (ctx && ctx->fonts && name && name[0]) ctx->fonts->push_back(name);
+}
+
+static void refresh_available_fonts() {
+    g_available_fonts.clear();
+    if (g_host.edit_handle && g_host.edit_handle->enum_font_name) {
+        FontEnumContext ctx{&g_available_fonts};
+        g_host.edit_handle->enum_font_name(&ctx, enum_font_callback);
+    }
+    std::sort(g_available_fonts.begin(), g_available_fonts.end());
+    g_available_fonts.erase(std::unique(g_available_fonts.begin(), g_available_fonts.end()), g_available_fonts.end());
+    g_available_fonts_loaded = true;
+}
 
 // ---------------------------------------------------------------------------
 // 目录持久化
@@ -306,6 +335,9 @@ void render_nav_bar() {
             // 与菜单关闭连带问题无法显示，须在菜单外延迟打开（同 BPM 提示）
             g_show_feature_switches = true;
         }
+        if (ImGui::MenuItem(tr(u8"首选项..."))) {
+            request_preferences_popup();
+        }
         ImGui::EndMenu();
     }
 
@@ -326,38 +358,40 @@ void render_nav_bar() {
         ImGui::EndMenu();
     }
 
-    // 右侧：效果链编辑（粗体、高亮背景）
-    float bar_width = ImGui::GetWindowWidth();
-    float left_x = ImGui::GetCursorPosX();
-    float right_x = bar_width - UI::EFFECT_CHAIN_BUTTON_WIDTH - ImGui::GetStyle().FramePadding.x * 2 - 12.0f;
-    float space = right_x - left_x;
-    if (space > 0) {
-        ImGui::SameLine(space);
-    }
+    if (g_current_page == AppPage::Config) {
+        // 右侧：效果链编辑（粗体、高亮背景）
+        float bar_width = ImGui::GetWindowWidth();
+        float left_x = ImGui::GetCursorPosX();
+        float right_x = bar_width - UI::EFFECT_CHAIN_BUTTON_WIDTH - ImGui::GetStyle().FramePadding.x * 2 - 12.0f;
+        float space = right_x - left_x;
+        if (space > 0) {
+            ImGui::SameLine(space);
+        }
 
-    if (g_show_effect_editor) {
-        ImGui::PushStyleColor(ImGuiCol_Button, UI::COL_ACCENT);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_ACCENT_HOVER);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_ACCENT_ACTIVE);
-    } else {
-        ImGui::PushStyleColor(ImGuiCol_Button, UI::COL_EFFECT_CHAIN_BG);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_EFFECT_CHAIN_HOVER);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_EFFECT_CHAIN_ACTIVE);
-    }
-    ImGui::PushStyleColor(ImGuiCol_Text, UI::COL_TEXT_PRIMARY);
+        if (g_show_effect_editor) {
+            ImGui::PushStyleColor(ImGuiCol_Button, UI::COL_ACCENT);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_ACCENT_HOVER);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_ACCENT_ACTIVE);
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, UI::COL_EFFECT_CHAIN_BG);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_EFFECT_CHAIN_HOVER);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_EFFECT_CHAIN_ACTIVE);
+        }
+        ImGui::PushStyleColor(ImGuiCol_Text, UI::COL_TEXT_PRIMARY);
 
-    if (g_font_bold && g_font_bold != g_font_normal) {
-        ImGui::PushFont(g_font_bold);
-    }
+        if (g_font_bold && g_font_bold != g_font_normal) {
+            ImGui::PushFont(g_font_bold);
+        }
 
-    if (ImGui::Button(tr(u8"效果链编辑"), ImVec2(UI::EFFECT_CHAIN_BUTTON_WIDTH, 0))) {
-        g_show_effect_editor = !g_show_effect_editor;
-    }
+        if (ImGui::Button(tr(u8"效果链编辑"), ImVec2(UI::EFFECT_CHAIN_BUTTON_WIDTH, 0))) {
+            g_show_effect_editor = !g_show_effect_editor;
+        }
 
-    if (g_font_bold && g_font_bold != g_font_normal) {
-        ImGui::PopFont();
+        if (g_font_bold && g_font_bold != g_font_normal) {
+            ImGui::PopFont();
+        }
+        ImGui::PopStyleColor(4);
     }
-    ImGui::PopStyleColor(4);
 
     ImGui::EndMenuBar();
 
@@ -373,7 +407,7 @@ void render_nav_bar() {
         ImGui::EndPopup();
     }
 
-    // 功能开关页面：右键菜单注册项开关（重启 AviUtl2 后生效）
+    // 功能开关页面：右键菜单注册项与解析功能开关
     if (g_show_feature_switches) {
         g_show_feature_switches = false;
         ImGui::OpenPopup(tr(u8"功能开关页面"));
@@ -382,16 +416,35 @@ void render_nav_bar() {
         ImGui::Text("%s", tr(u8"右键菜单注册项"));
         ImGui::Separator();
 
-        bool changed = false;
+        bool menu_changed = false;
         for (auto& e : menu_registry_all()) {
             bool enabled = e.enabled;
             if (ImGui::Checkbox(tr(e.label_key.c_str()), &enabled)) {
                 e.enabled = enabled;
-                changed = true;
+                menu_changed = true;
             }
         }
-        if (changed) {
+        if (menu_changed) {
             menu_registry_save();
+        }
+
+        if (!feature_registry_all().empty()) {
+            ImGui::Spacing();
+            ImGui::Text("%s", tr(u8"解析功能"));
+            ImGui::Separator();
+
+            bool feature_changed = false;
+            for (auto& e : feature_registry_all()) {
+                bool enabled = e.enabled;
+                if (ImGui::Checkbox(tr(e.label_key.c_str()), &enabled)) {
+                    e.enabled = enabled;
+                    feature_changed = true;
+                }
+            }
+            if (feature_changed) {
+                feature_registry_save();
+            }
+            ImGui::TextDisabled("%s", tr(u8"解析功能设置在下次导入工程时生效"));
         }
 
         ImGui::Separator();
@@ -401,6 +454,139 @@ void render_nav_bar() {
         }
         ImGui::EndPopup();
     }
+    render_preferences_popup();
+}
+
+static void render_preferences_popup() {
+    if (g_show_preferences) {
+        g_show_preferences = false;
+        ImGui::OpenPopup(tr(u8"首选项"));
+    }
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0),
+        ImVec2(std::max(1.0f, display.x - 32.0f), std::max(1.0f, display.y - 32.0f)));
+    if (!ImGui::BeginPopupModal(tr(u8"首选项"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+
+    Preferences& pref = preferences();
+    if (!g_available_fonts_loaded) refresh_available_fonts();
+
+    ImGui::Text("%s", tr(u8"解析设置"));
+    ImGui::Separator();
+    bool parse_xmidi = pref.parse_rpp_xmidi_notes;
+    if (ImGui::Checkbox(tr(u8"将XMIDI物件按音符解析"), &parse_xmidi)) {
+        pref.parse_rpp_xmidi_notes = parse_xmidi;
+        preferences_save();
+    }
+    if (ImGui::Button(tr(u8"恢复默认##xmidi"))) {
+        preferences_reset_xmidi();
+    }
+
+    ImGui::Spacing();
+    ImGui::Text("%s", tr(u8"窗口设置"));
+    ImGui::Separator();
+    int width = pref.window_width;
+    int height = pref.window_height;
+    bool size_changed = false;
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::InputInt(tr(u8"宽度##window"), &width, 10, 100)) size_changed = true;
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::InputInt(tr(u8"高度##window"), &height, 10, 100)) size_changed = true;
+    if (size_changed) {
+        pref.window_width = std::clamp(width, 640, 3840);
+        pref.window_height = std::clamp(height, 420, 2160);
+        preferences_save();
+        imgui_window_apply_preferences();
+    }
+    if (ImGui::Button(tr(u8"恢复默认##window"))) {
+        preferences_reset_window_size();
+        imgui_window_apply_preferences();
+    }
+
+    ImGui::Spacing();
+    ImGui::Text("%s", tr(u8"字体设置"));
+    ImGui::Separator();
+    std::wstring host_font;
+    host_get_default_font(host_font);
+    std::string preview = pref.font_name.empty()
+        ? tr_str(u8"跟随AviUtl2主题") : wide_to_utf8(pref.font_name);
+    ImGui::SetNextItemWidth(std::min(360.0f, std::max(100.0f, display.x - 96.0f)));
+    if (ImGui::BeginCombo("##UIFont", preview.c_str())) {
+        bool follow_selected = pref.font_name.empty();
+        if (ImGui::Selectable(tr(u8"跟随AviUtl2主题"), follow_selected)) {
+            pref.font_name.clear();
+            preferences_save();
+            imgui_window_apply_preferences();
+        }
+        for (const auto& font : g_available_fonts) {
+            bool selected = pref.font_name == font;
+            std::string label = wide_to_utf8(font);
+            if (ImGui::Selectable(label.c_str(), selected)) {
+                pref.font_name = font;
+                preferences_save();
+                imgui_window_apply_preferences();
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::Button(tr(u8"刷新字体列表"))) refresh_available_fonts();
+    if (!host_font.empty()) {
+        ImGui::TextDisabled("%s: %s", tr(u8"当前主题字体"), wide_to_utf8(host_font).c_str());
+    }
+    if (ImGui::Button(tr(u8"恢复默认##font"))) {
+        preferences_reset_font();
+        imgui_window_apply_preferences();
+    }
+
+    float font_size = pref.font_size;
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::InputFloat(tr(u8"字号"), &font_size, 1.0f, 2.0f, "%.1f",
+                          ImGuiInputTextFlags_EnterReturnsTrue)) {
+        pref.font_size = std::clamp(font_size, 10.0f, 48.0f);
+        preferences_save();
+        imgui_window_apply_preferences();
+    }
+    if (ImGui::Button(tr(u8"恢复默认##font_size"))) {
+        preferences_reset_font_size();
+        imgui_window_apply_preferences();
+    }
+
+    ImGui::Spacing();
+    ImGui::Text("%s", tr(u8"编辑器设置"));
+    ImGui::Separator();
+    bool editor_default = pref.effect_editor_default;
+    if (ImGui::Checkbox(tr(u8"效果链编辑器默认开启"), &editor_default)) {
+        pref.effect_editor_default = editor_default;
+        preferences_save();
+    }
+    if (ImGui::Button(tr(u8"恢复默认##editor"))) {
+        preferences_reset_effect_editor();
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    if (ImGui::Button(tr(u8"恢复所有默认配置"))) {
+        g_show_preferences_reset_confirm = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(u8"关闭"))) ImGui::CloseCurrentPopup();
+
+    if (g_show_preferences_reset_confirm) {
+        g_show_preferences_reset_confirm = false;
+        ImGui::OpenPopup(tr(u8"确认恢复所有默认配置"));
+    }
+    if (ImGui::BeginPopupModal(tr(u8"确认恢复所有默认配置"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("%s", tr(u8"确定要恢复所有首选项的默认配置吗？"));
+        if (ImGui::Button(tr(u8"确定"), ImVec2(90, 0))) {
+            preferences_reset_all();
+            imgui_window_apply_preferences();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(u8"取消"), ImVec2(90, 0))) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    ImGui::EndPopup();
 }
 
 // ---------------------------------------------------------------------------
@@ -749,13 +935,18 @@ void render_config_panel() {
         tr(u8"拉伸到下一音符"),
         tr(u8"拉伸到固定值"),
         tr(u8"仅在间隙生成"),
-        tr(u8"仅在间隙并拉伸固定值")
+        tr(u8"仅在间隙并拉伸固定值"),
+        tr(u8"拉伸并固定最后一帧")
     };
-    ImGui::Combo(tr(u8"同步模式"), &cfg.sync_mode, sync_labels, 5);
-    if (cfg.sync_mode == 2 || cfg.sync_mode == 4) {
+    ImGui::Combo(tr(u8"同步模式"), &cfg.sync_mode, sync_labels, 6);
+    if (cfg.sync_mode == SYNC_MODE_FIXED || cfg.sync_mode == SYNC_MODE_GAP_FIXED ||
+        cfg.sync_mode == SYNC_MODE_STRETCH_HOLD_LAST) {
         ImGui::Indent(16);
         ImGui::InputInt(tr(u8"固定帧数"), &cfg.fixed_duration_frames, 1, 10);
         if (cfg.fixed_duration_frames < 1) cfg.fixed_duration_frames = 1;
+        if (cfg.sync_mode == SYNC_MODE_STRETCH_HOLD_LAST) {
+            ImGui::Checkbox(tr(u8"拉伸至下一音符"), &cfg.stretch_hold_last_to_next);
+        }
         ImGui::Unindent(16);
     }
 
@@ -788,7 +979,7 @@ void render_config_panel() {
 
         int strategy_idx = cfg.mapping_strategy - 1;
         if (strategy_idx < 0) strategy_idx = 0;
-        if (strategy_idx > 2) strategy_idx = 2;
+        if (strategy_idx > 3) strategy_idx = 3;
 
         ImGui::RadioButton(tr(u8"顺序轮替"), &strategy_idx, 0);
         if (strategy_idx == 0) {
@@ -813,6 +1004,15 @@ void render_config_panel() {
             } else {
                 ImGui::TextDisabled("%s", tr(u8"使用和弦位置分配模板"));
             }
+            ImGui::Unindent(24);
+        }
+
+        ImGui::RadioButton(tr(u8"动画序列 [beta]"), &strategy_idx, 3);
+        if (strategy_idx == 3) {
+            ImGui::Indent(24);
+            ImGui::Checkbox(tr(u8"允许拉伸"), &cfg.animation_sequence_allow_stretch);
+            ImGui::TextDisabled("%s", tr(u8"动画序列允许拉伸说明"));
+            ImGui::TextDisabled("%s", tr(u8"将模板物件视为同一音的动画序列"));
             ImGui::Unindent(24);
         }
 

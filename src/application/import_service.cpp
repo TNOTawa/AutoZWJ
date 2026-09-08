@@ -2,7 +2,10 @@
 #include "codec/codec.h"
 #include "parsers/rpp/rpp_parser.h"
 #include "parsers/midi/midi_parser.h"
+#include "parsers/ust/ust_parser.h"
+#include "parsers/ustx/ustx_parser.h"
 #include "parsers/lrc/lrc_parser.h"
+#include "core/preferences.h"
 #include <algorithm>
 
 ParsedProject parse_source(const std::wstring& file_path) {
@@ -14,11 +17,23 @@ ParsedProject parse_source(const std::wstring& file_path) {
 
     EndWarnings warnings;
     bool ok = false;
-    if (lower.find(".rpp") != std::string::npos) {
-        ok = parse_rpp_auto(path_utf8, result.objdict, result.tracks, result.file_paths, warnings);
-    } else if (lower.find(".mid") != std::string::npos) {
+    size_t dot = lower.find_last_of('.');
+    std::string extension = dot == std::string::npos ? std::string() : lower.substr(dot);
+
+    if (extension == ".rpp") {
+        RppParseMetadata metadata;
+        ok = parse_rpp_auto(path_utf8, result.objdict, result.tracks, result.file_paths,
+                            warnings, 0.0, 100000.0, &metadata);
+        if (ok && preferences().parse_rpp_xmidi_notes) {
+            expand_rpp_xmidi_items(result.objdict, result.tracks, metadata);
+        }
+    } else if (extension == ".mid" || extension == ".midi") {
         ok = parse_midi(path_utf8, result.objdict, result.tracks, result.file_paths);
-    } else if (lower.find(".lrc") != std::string::npos) {
+    } else if (extension == ".ust") {
+        ok = parse_ust(path_utf8, result.objdict, result.tracks, result.file_paths);
+    } else if (extension == ".ustx") {
+        ok = parse_ustx(path_utf8, result.objdict, result.tracks, result.file_paths);
+    } else if (extension == ".lrc") {
         ok = parse_lrc(path_utf8, result.objdict, result.tracks, result.file_paths);
     }
 

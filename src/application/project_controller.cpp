@@ -10,7 +10,7 @@ bool g_project_state_dirty = false;
 bool select_project(AppState& app, const std::wstring& file_path) {
     auto parsed = parse_source(file_path);
     if (parsed.tracks.empty() && parsed.objdict.pos.empty()) {
-        app_msg_set(AppMsgSeverity::Error, tr_str(u8"无法解析该文件，仅支持 .rpp / .mid / .lrc"));
+        app_msg_set(AppMsgSeverity::Error, tr_str(u8"无法解析该文件，仅支持 .rpp / .mid / .ust / .ustx / .lrc"));
         return false;
     }
 

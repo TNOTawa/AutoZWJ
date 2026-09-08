@@ -6,16 +6,16 @@
 |------|------|------|
 | MinGW-w64 | g++ 15.2+ (需支持 C++20) | 构建自包含的静态 DLL |
 | CMake | 3.20+ | 构建系统 |
-| AviUtl2 SDK | git 子模块 `aviutl2_sdk`（镜像仓库） | 头文件位于 `include/aviutl2_sdk/` |
-| Dear ImGui | docking 分支（git 子模块 `src/thirdparty/imgui/`） | — |
+| AviUtl2 SDK | git 子模块 `aviutl2_sdk`（镜像仓库，跟踪上游 main） | 头文件位于 `include/aviutl2_sdk/` |
+| Dear ImGui | docking 分支固定版本，内联于 `src/thirdparty/imgui/`（见 [VENDOR.md](../thirdparty/imgui/VENDOR.md)） | — |
 | DirectX 11 SDK | — | Windows 自带 |
 
 ## 构建命令
 
-首次克隆后初始化子模块：
+首次克隆后初始化 SDK 子模块：
 
 ```powershell
-git submodule update --init --recursive
+git submodule update --init
 ```
 
 本地开发使用 Debug 构建（含完整调试信息，产物约 20MB）：
@@ -54,6 +54,8 @@ src/
 ├── parsers/
 │   ├── rpp/rpp_parser.h/cpp        # REAPER .rpp 解析器
 │   ├── midi/midi_parser.h/cpp      # SMF .mid 解析器
+│   ├── ust/ust_parser.h/cpp        # UTAU .ust 解析器
+│   ├── ustx/ustx_parser.h/cpp      # OpenUTAU .ustx 解析器
 │   ├── lrc/lrc_parser.h/cpp        # LRC 歌词解析器
 │   └── tempo_convert.h             # tempo_map → BPM_INFO[] 共享转换（仅头文件）
 ├── codec/codec.h/cpp               # 字符编码转换（utf8/wide/cp932）
@@ -73,7 +75,7 @@ src/
 ├── tools/
 │   └── tempo/tempo_apply.h/cpp     # BPM 网格同步工具
 ├── version.rc.in                   # VERSIONINFO 产物元数据模板（版本/作者）
-└── thirdparty/imgui/               # Dear ImGui docking 分支（git 子模块）
+└── thirdparty/imgui/               # Dear ImGui docking 分支（内联源码，固定版本）
 ```
 
 ---

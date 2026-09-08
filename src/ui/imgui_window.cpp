@@ -1,4 +1,4 @@
-﻿#include "imgui_window.h"
+#include "imgui_window.h"
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
@@ -6,8 +6,11 @@
 #include "ui/ui_config.h"
 #include "ui/effect_chain_editor.h"
 #include "plugin.h"
+#include "resources/autozwj_resource.h"
 #include <d3d11.h>
 #include <cstdio>
+#include <algorithm>
+#include <cwctype>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -25,12 +28,100 @@ static ID3D11RenderTargetView* g_rtv = nullptr;
 static bool g_visible = false;
 static bool g_initialized = false;
 static bool g_rendering = false;
+static bool g_apply_preferences_requested = false;
 static bool (*g_on_generate)() = nullptr;
 static WNDCLASSEXW g_wc = {};
 ImFont* g_font_normal = nullptr;
 ImFont* g_font_bold = nullptr;
 
+static constexpr wchar_t k_window_class_name[] = L"AutoZWJ_Window";
+static constexpr wchar_t k_window_title[] = L"AutoZWJ";
+
 #define TIMER_RENDER 1
+
+static bool path_exists(const std::wstring& path) {
+    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+static std::wstring lower_wide(std::wstring value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](wchar_t c) { return std::towlower(c); });
+    return value;
+}
+
+static std::wstring find_installed_font_path(const std::wstring& requested) {
+    if (requested.empty()) return L"";
+    const std::wstring wanted = lower_wide(requested);
+    const HKEY roots[] = { HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE };
+    for (HKEY root : roots) {
+        HKEY key = nullptr;
+        if (RegOpenKeyExW(root, L"Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", 0, KEY_READ, &key) != ERROR_SUCCESS) continue;
+        for (DWORD index = 0;; index++) {
+            wchar_t value_name[512] = {};
+            wchar_t value[512] = {};
+            DWORD name_len = 512;
+            DWORD value_len = sizeof(value);
+            DWORD type = 0;
+            if (RegEnumValueW(key, index, value_name, &name_len, nullptr, &type,
+                              reinterpret_cast<LPBYTE>(value), &value_len) != ERROR_SUCCESS) break;
+            std::wstring label = lower_wide(value_name);
+            size_t suffix = label.find(L" (");
+            if (label.find(wanted) == std::wstring::npos &&
+                wanted.find(label.substr(0, suffix == std::wstring::npos ? label.size() : suffix)) == std::wstring::npos) continue;
+            std::wstring path = value;
+            if (path.find(L':') == std::wstring::npos) {
+                wchar_t windir[MAX_PATH] = {};
+                GetWindowsDirectoryW(windir, MAX_PATH);
+                path = std::wstring(windir) + L"\\Fonts\\" + path;
+            }
+            RegCloseKey(key);
+            if (path_exists(path)) return path;
+        }
+        RegCloseKey(key);
+    }
+    return L"";
+}
+
+static std::wstring configured_font_name() {
+    if (!preferences().font_name.empty()) return preferences().font_name;
+    std::wstring name;
+    host_get_default_font(name);
+    return name;
+}
+
+static void load_imgui_fonts() {
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->ClearFonts();
+    g_font_normal = nullptr;
+    g_font_bold = nullptr;
+    static const ImWchar ranges[] = {
+        0x0020, 0x00FF, 0x2000, 0x206F, 0x3000, 0x30FF,
+        0x31F0, 0x31FF, 0xFF00, 0xFFEF, 0x4E00, 0x9FFF, 0
+    };
+    const float font_size = preferences().font_size;
+    std::wstring configured_name = configured_font_name();
+    std::wstring primary_path = find_installed_font_path(configured_name);
+    if (primary_path.empty()) primary_path = L"C:\\Windows\\Fonts\\msyh.ttc";
+    if (path_exists(primary_path)) {
+        const std::string primary_utf8 = wide_to_utf8(primary_path);
+        g_font_normal = io.Fonts->AddFontFromFileTTF(primary_utf8.c_str(), font_size, nullptr, ranges);
+        const std::wstring fallback_path = L"C:\\Windows\\Fonts\\msyh.ttc";
+        bool needs_fallback = !configured_name.empty() && !host_font_supports_cjk(configured_name);
+        if (g_font_normal && needs_fallback && lower_wide(primary_path) != lower_wide(fallback_path) && path_exists(fallback_path)) {
+            ImFontConfig fallback_cfg;
+            fallback_cfg.MergeMode = true;
+            const std::string fallback_utf8 = wide_to_utf8(fallback_path);
+            io.Fonts->AddFontFromFileTTF(fallback_utf8.c_str(), font_size, &fallback_cfg, ranges);
+        }
+    }
+    if (!g_font_normal) {
+        ImFontConfig config;
+        config.SizePixels = font_size;
+        g_font_normal = io.Fonts->AddFontDefault(&config);
+    }
+    g_font_bold = g_font_normal;
+    io.FontDefault = g_font_normal;
+    ImGui::GetStyle().FontSizeBase = font_size;
+}
 
 static bool create_render_target() {
     if (g_rtv) { g_rtv->Release(); g_rtv = nullptr; }
@@ -152,6 +243,11 @@ static void render_frame() {
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
     g_swap_chain->Present(1, 0);
 
+    if (g_apply_preferences_requested) {
+        g_apply_preferences_requested = false;
+        load_imgui_fonts();
+    }
+
     g_rendering = false;
 }
 
@@ -187,26 +283,34 @@ LRESULT CALLBACK imgui_wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         KillTimer(hwnd, TIMER_RENDER);
         return 0;
     }
-    return DefWindowProc(hwnd, msg, wp, lp);
+    return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
 bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
     if (g_initialized) return true;
 
     g_wc.cbSize = sizeof(WNDCLASSEXW);
-    g_wc.lpszClassName = L"AutoZWJ_Window";
+    g_wc.lpszClassName = k_window_class_name;
     g_wc.lpfnWndProc = imgui_wnd_proc;
     g_wc.hInstance = hinst;
     g_wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     g_wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    g_wc.hIcon = (HICON)LoadImageW(hinst, MAKEINTRESOURCEW(IDI_AUTOZWJ), IMAGE_ICON,
+        GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+    g_wc.hIconSm = (HICON)LoadImageW(hinst, MAKEINTRESOURCEW(IDI_AUTOZWJ), IMAGE_ICON,
+        GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
     if (!RegisterClassExW(&g_wc)) return false;
 
     g_imgui_hwnd = CreateWindowExW(
-        0, L"AutoZWJ_Window", L"AutoZWJ",
+        0, k_window_class_name, k_window_title,
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 1127, 650,
+        CW_USEDEFAULT, CW_USEDEFAULT, preferences().window_width, preferences().window_height,
         host_window, nullptr, hinst, nullptr);
     if (!g_imgui_hwnd) return false;
+
+    SetWindowTextW(g_imgui_hwnd, k_window_title);
+    SendMessageW(g_imgui_hwnd, WM_SETICON, ICON_BIG, (LPARAM)g_wc.hIcon);
+    SendMessageW(g_imgui_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)g_wc.hIconSm);
 
     ShowWindow(g_imgui_hwnd, SW_SHOW);
     UpdateWindow(g_imgui_hwnd);
@@ -223,53 +327,7 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.IniFilename = nullptr;
 
-    {
-        static const ImWchar ranges[] = {
-            0x0020, 0x00FF,
-            0x2000, 0x206F,
-            0x3000, 0x30FF,
-            0x31F0, 0x31FF,
-            0xFF00, 0xFFEF,
-            0x4E00, 0x9FFF,
-            0,
-        };
-
-        struct FontPair {
-            const char* normal;
-            const char* bold;
-        };
-
-        FontPair candidates[] = {
-            {"C:\\Windows\\Fonts\\msyh.ttc",   "C:\\Windows\\Fonts\\msyhbd.ttc"},
-            {"C:\\Windows\\Fonts\\segoeui.ttf", "C:\\Windows\\Fonts\\segoeuib.ttf"},
-            {"C:\\Windows\\Fonts\\YuGothR.ttc", "C:\\Windows\\Fonts\\YuGothB.ttc"},
-        };
-
-        for (auto& cand : candidates) {
-            FILE* fp = fopen(cand.normal, "rb");
-            if (!fp) continue;
-            fclose(fp);
-
-            g_font_normal = io.Fonts->AddFontFromFileTTF(cand.normal, UI::FONT_SIZE, nullptr, ranges);
-            if (!g_font_normal) continue;
-
-            fp = fopen(cand.bold, "rb");
-            if (fp) {
-                fclose(fp);
-                g_font_bold = io.Fonts->AddFontFromFileTTF(cand.bold, UI::FONT_SIZE, nullptr, ranges);
-            }
-            break;
-        }
-
-        if (!g_font_normal) {
-            g_font_normal = io.Fonts->AddFontDefault();
-            io.Fonts->Build();
-        }
-
-        if (!g_font_bold) {
-            g_font_bold = g_font_normal;
-        }
-    }
+    load_imgui_fonts();
 
     UI::ApplyTheme(ImGui::GetStyle());
 
@@ -288,7 +346,7 @@ void imgui_window_show() {
     if (!g_initialized) return;
     if (!g_app.scene.valid) sync_scene_info();
     g_current_page = AppPage::Config;
-    g_show_effect_editor = false;
+    g_show_effect_editor = preferences().effect_editor_default;
     g_app.current_template_index = 0;
     if (!g_app.templates.empty()) {
         load_template_data(0);
@@ -303,8 +361,26 @@ void imgui_window_show() {
     SetForegroundWindow(g_imgui_hwnd);
     g_visible = true;
     InvalidateRect(g_imgui_hwnd, nullptr, FALSE);
-    SetWindowTextW(g_imgui_hwnd, L"AutoZWJ");
+    SetWindowTextW(g_imgui_hwnd, k_window_title);
     render_frame();
+}
+
+void imgui_window_show_preferences() {
+    if (!g_initialized) return;
+    request_preferences_popup();
+    ShowWindow(g_imgui_hwnd, SW_SHOW);
+    SetForegroundWindow(g_imgui_hwnd);
+    g_visible = true;
+    InvalidateRect(g_imgui_hwnd, nullptr, FALSE);
+    SetWindowTextW(g_imgui_hwnd, k_window_title);
+    render_frame();
+}
+
+void imgui_window_apply_preferences() {
+    if (!g_initialized) return;
+    SetWindowPos(g_imgui_hwnd, nullptr, 0, 0, preferences().window_width, preferences().window_height,
+        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    g_apply_preferences_requested = true;
 }
 
 void imgui_window_show_import_page() {
@@ -315,7 +391,7 @@ void imgui_window_show_import_page() {
     SetForegroundWindow(g_imgui_hwnd);
     g_visible = true;
     InvalidateRect(g_imgui_hwnd, nullptr, FALSE);
-    SetWindowTextW(g_imgui_hwnd, L"AutoZWJ");
+    SetWindowTextW(g_imgui_hwnd, k_window_title);
     render_frame();
 }
 
@@ -349,7 +425,7 @@ void imgui_window_shutdown() {
     ImGui::DestroyContext();
     cleanup_device();
     if (g_imgui_hwnd) { DestroyWindow(g_imgui_hwnd); g_imgui_hwnd = nullptr; }
-    UnregisterClassW(L"AutoZWJ_Window", g_wc.hInstance);
+    UnregisterClassW(k_window_class_name, g_wc.hInstance);
     g_initialized = false;
 }
 

@@ -1,0 +1,25 @@
+[#SETTING]
+Tempo=500000
+Tracks=1
+ProjectName=AutoZWJ UST Test
+Charset=UTF-8
+Mode2=True
+[#VERSION]
+UST Version1.2.00
+[#0000]
+Length=480
+Lyric=a
+NoteNum=60
+Velocity=80
+[#0001]
+Length=240
+Lyric=R
+NoteNum=60
+[#0002]
+Length=240
+Delta=480
+Duration=240
+Lyric=あ
+NoteNum=62
+Tempo=150
+[#TRACKEND]

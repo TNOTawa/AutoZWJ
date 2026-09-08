@@ -14,6 +14,7 @@ extern AppPage g_current_page;
 void render_nav_bar();
 void render_import_page();
 void render_config_page();
+void request_preferences_popup();
 
 // 轨道树渲染，read_only=true 时不可交互（仅预览）
 void render_track_tree(bool read_only = false);

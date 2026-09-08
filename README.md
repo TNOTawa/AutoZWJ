@@ -1,54 +1,93 @@
-[English](docs/en/) | [日本語](docs/ja/)
+<h1 align="center">
+  <img src="docs/images/logo.svg" alt="AutoZWJ" width="180"><br>
+  <strong>AutoZWJ</strong>
+</h1>
 
-# AutoZWJ
+<p align="center">
+  A plugin for AviUtl2<br>
+  An Otomad/YTPMV track alignment assistant supporting RPP, MIDI, and other project formats.
+</p>
 
-> RPP / MIDI → AviUtl2 物件批量导入插件
+<p align="center">
+  <a href="https://github.com/TNOTawa/AutoZWJ/releases/latest">
+    <img src="https://img.shields.io/github/v/release/TNOTawa/AutoZWJ?display_name=tag" alt="Latest release">
+  </a>
+  <a href="https://github.com/TNOTawa/AutoZWJ/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/TNOTawa/AutoZWJ" alt="License">
+  </a>
+  <a href="https://github.com/TNOTawa/AutoZWJ/releases/latest">
+    <img src="https://img.shields.io/github/downloads/TNOTawa/AutoZWJ/total" alt="Downloads">
+  </a>
+  <a href="https://github.com/TNOTawa/AutoZWJ">
+    <img src="https://img.shields.io/github/stars/TNOTawa/AutoZWJ" alt="Stars">
+  </a>
+  <img src="https://img.shields.io/github/last-commit/TNOTawa/AutoZWJ" alt="Last commit">
+</p>
 
-将 REAPER 工程文件（`.rpp`）、标准 MIDI 文件（`.mid`）或 LRC 歌词文件（`.lrc`）中的素材，以用户在 AviUtl2 中选定的物件为模板，批量生成到时间轴上。
+<p align="center">
+  English |
+  <a href="docs/zh/README.md">简体中文</a> |
+  <a href="docs/ja/README.md">日本語</a>
+</p>
 
-## 功能概述
+Import media items from REAPER project files (`.rpp`), standard MIDI files (`.mid`), UTAU/OpenUTAU files (`.ust` / `.ustx`), or LRC lyrics files (`.lrc`) into the AviUtl2 timeline as objects, using existing objects as style templates.
 
-- 解析 REAPER `.rpp`、标准 MIDI `.mid`、LRC `.lrc` 等工程文件
-- 以时间轴上已有物件为**样式模板**，继承其效果链、参数设定
-- **多源映射** —— 选中多个模板物件，按策略（顺序轮替 / 随机抽选 / 和弦映射）分配
-- **效果链编辑器** —— 只读展示模板效果链，勾选参数 bake + 设置目标值 / 变量映射 / 表达式求值
-- **脚本变量系统** —— `$note.velocity$ / 127 * 200` 等表达式驱动 bake 值
-- **BPM 网格同步** —— 将 MIDI/RPP 的 tempo map 写入 AviUtl2 的 BPM 网格
-- **国际化支持** —— 界面支持简体中文 / English / 日本語，自动检测宿主 UI 语言
-- 在模板下方自动分配图层，紧凑排列
-- 交替翻转、物件时长控制、多音符策略、偶数项换行
-- 所有参数自动从当前场景读取（FPS、分辨率），并跨会话持久化
+## Features
 
-## 安装
+- Parse REAPER `.rpp` / standard MIDI `.mid` / UTAU `.ust` / OpenUTAU `.ustx` / LRC `.lrc` files
+- Use existing timeline objects as style templates, inheriting their effect chains and parameters
+- Multi-source mapping: assign multiple templates using configurable strategies (sequential rotation / random selection / chord mapping / animation sequence [beta])
+- Effect chain editor: view template effect chains and bake parameters with fixed values / variable mappings / evaluated expressions
+- Script variable system: drive bake values with expressions such as `$note.velocity$ / 127 * 200`
+- BPM grid sync: apply MIDI/RPP tempo maps to AviUtl2's BPM grid
+- Internationalization: UI available in Simplified Chinese, English, and Japanese, with automatic host UI language detection
+- Automatic layer allocation below the template, compactly arranged
+- Alternating flips, object duration control, multi-note strategies, alternating row layout
+- Object and note sync modes, including stretch-and-hold-last-frame with optional next-note stretching
+- All parameters automatically read from the current scene (FPS, resolution) and persisted across sessions
 
-将 `AutoZWJ.aux2` 放入 AviUtl2 的 `Plugin` 目录，启动 AviUtl2 即可加载。
+## Installation
 
-## 快速上手
+### Install with AviUtl2 Catalog
 
-1. **开始使用**  
-   在时间轴上**选中任意一个物件**，右键 → **配置导入...**。若时间轴上还没有物件，可先任意放置一个素材作为模板，或直接跳至第 2 步拖入工程文件
+We recommend installing AutoZWJ through [AviUtl2 Catalog](https://github.com/Neosku/aviutl2-catalog) for easier management and updates.
 
-2. **导入工程**  
-   若尚未导入工程，插件窗口会自动进入工程导入页：将 `.rpp` / `.mid` 文件拖入 AviUtl2 窗口，或在导入页选择 REAPER 最近文件 / 浏览...；随后勾选要生成的轨道，点击**确认导入**
+### Drag-and-drop installation
 
-3. **配置并生成**  
-   在配置页调整参数 → 点击**确定**或**应用**
+Drag the `AutoZWJ.aux2` file directly into AviUtl2's preview window to install it automatically.
 
-详细教程与功能说明请参阅 [文档](docs/zh/)。
+### Manual installation
 
-## 构建
+Place `AutoZWJ.aux2` in AviUtl2's `Plugin` directory, then launch AviUtl2.
 
-需要 MinGW-w64 (g++ 15.2+)、CMake 3.20+。AviUtl2 SDK 与 Dear ImGui 以 git 子模块管理，首次克隆后先初始化：
+## Quick Start
+
+1. **Start**<br>
+   Select **any object** on the timeline, right-click → **Configure import...**. If the timeline is empty, place any object first to serve as a template, or skip to step 2 and drop a project file
+
+2. **Load a project**<br>
+   If no project is loaded yet, the plugin window opens on the import page automatically: drop a `.rpp` / `.mid` / `.ust` / `.ustx` file onto the AviUtl2 window, or choose a recent project / **Browse...** on the import page; then check the tracks to generate and click **Confirm import**
+
+3. **Configure and generate**<br>
+   Adjust parameters on the config page → click **OK** or **Apply**
+
+For detailed tutorials and feature explanations, see the [documentation](docs/en/index.md).
+
+## Build
+
+Requires MinGW-w64 (g++ 15.2+), CMake 3.20+. The AviUtl2 SDK is managed as a git submodule; Dear ImGui is vendored under `src/thirdparty/imgui` at a fixed version. After the first clone, initialize the submodule:
 
 ```powershell
-git submodule update --init --recursive
+git submodule update --init
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -G "MinGW Makefiles"
 cmake --build build
 ```
 
-产物为 `build/AutoZWJ.aux2`。正式发版由 GitHub Actions 在推送 `v*` tag 时自动构建 Release 并发布，详见 [docs/zh/build.md](docs/zh/build.md)。
+Output: `build/AutoZWJ.aux2`.
 
-## 参考
+Official releases are built by GitHub Actions on `v*` tag pushes and published as GitHub Releases. See the [build guide](docs/zh/build.md) for details.
+
+## References
 
 - [AviUtl2 / AviUtl ExEdit2 Plugin SDK](https://spring-fragrance.mints.ne.jp/aviutl/)
 - [Dear ImGui](https://github.com/ocornut/imgui)
@@ -58,6 +97,55 @@ cmake --build build
 - [import_midi_tempos.aux2](https://github.com/sevenc-nanashi/import_midi_tempos.aux2)
 - [UltraPaste](https://github.com/zzzzzz9125/UltraPaste)
 
-## 许可
+## Contributing
 
-MIT License
+Contributions to AutoZWJ are welcome, including bug fixes, feature improvements, documentation updates, and translations. We recommend the following process:
+
+1. Fork this repository and create a dedicated branch
+2. Make your changes and perform the necessary builds and tests before committing
+3. Open a Pull Request describing the purpose, key changes, and verification results
+
+For major features or architectural changes, please discuss the proposal in an Issue before starting implementation.
+
+<p align="center">
+  <a href="https://github.com/TNOTawa/AutoZWJ/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=tnotawa/autozwj" alt="Contributors">
+  </a>
+</p>
+
+## Reporting Issues
+
+If you encounter a problem or have a feature request, submit it through [Issues](https://github.com/TNOTawa/AutoZWJ/issues). Please include as much of the following information as possible:
+
+- AutoZWJ version, AviUtl2 version, and Windows version
+- Project format used (RPP, MIDI, or LRC) and reproducible steps
+- Expected result and actual result
+- Relevant logs, screenshots, and a sanitized minimal sample file when necessary
+
+Please search existing Issues before submitting to avoid duplicates.
+
+## Donate
+
+If AutoZWJ is useful to you, you can support its continued development through either platform below.
+
+<p align="center">
+  <a href="https://ifdian.net/a/tnotawa">
+    <img src="https://img.shields.io/badge/Afdian-Sponsor-946CE6?style=flat-square" alt="Support on Afdian">
+  </a>
+  <a href="https://tnot.fanbox.cc/">
+    <img src="https://img.shields.io/badge/pixivFANBOX-Sponsor-0096FA?style=flat-square" alt="Support on pixivFANBOX">
+  </a>
+</p>
+
+## License
+
+The AutoZWJ software and software-related documentation are licensed under
+the [MIT License](LICENSE).
+
+The logo artwork [`docs/images/logo.svg`](docs/images/logo.svg) and its
+editable source file
+[`docs/images/autozwj-logo-vector.af`](docs/images/autozwj-logo-vector.af) are
+excluded from the MIT License. They are separately licensed under
+[CC BY-NC-ND 4.0](LICENSE-CC-BY-NC-ND-4.0). See
+[`docs/images/README.md`](docs/images/README.md) for the asset scope and
+attribution notice.

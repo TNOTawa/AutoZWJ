@@ -1,4 +1,4 @@
-﻿#include "plugin.h"
+#include "plugin.h"
 #include "i18n/i18n.h"
 #include "config2.h"
 #include "core/app_message.h"
@@ -14,6 +14,7 @@
 #include "generation/generation.h"
 #include "codec/codec.h"
 #include "adapters/menu_registry.h"
+#include "core/preferences.h"
 #include "tools/up/up.h"
 #include <algorithm>
 #include <sstream>
@@ -35,7 +36,7 @@ static uint32_t hash_string(const std::string& s) {
 
 COMMON_PLUGIN_TABLE common_plugin_table = {
     L"AutoZWJ",
-    L"AutoZWJ - RPP/MIDI to AviUtl2 object importer",
+    L"AutoZWJ - RPP/MIDI/UTAU to AviUtl2 object importer",
 };
 
 EXTERN_C __declspec(dllexport) COMMON_PLUGIN_TABLE* GetCommonPluginTable(void) {
@@ -109,6 +110,7 @@ EXTERN_C __declspec(dllexport) void InitializeConfig(CONFIG_HANDLE* config) {
     i18n_set_host_lang_detector(detect_aviutl2_lang);
     if (config && config->app_data_path) {
         menu_registry_load(config->app_data_path);
+        preferences_load(config->app_data_path);
     }
 }
 
@@ -171,6 +173,9 @@ static void gen_edit_callback(void* param, EDIT_SECTION* edit) {
                     break;
                 case ObjNameKind::Item:
                     nm = utf8_to_wide(tr_str(u8"Item")) + L" " + std::to_wstring(s.name_index);
+                    if (s.name_sub_index > 0) {
+                        nm += L"." + std::to_wstring(s.name_sub_index);
+                    }
                     break;
             }
             edit->set_object_name(obj, nm.c_str());
@@ -353,12 +358,74 @@ void sync_scene_info() {
     g_app.project.config.fps_den = info.scale;
 }
 
+bool host_get_default_font(std::wstring& name) {
+    if (!g_config_handle || !g_config_handle->get_font_info) return false;
+    FONT_INFO* info = g_config_handle->get_font_info(g_config_handle, "Default");
+    if (!info || !info->name || !info->name[0]) return false;
+    name = info->name;
+    return true;
+}
+
+bool host_font_supports_cjk(const std::wstring& name) {
+    if (name.empty()) return false;
+    HDC dc = GetDC(nullptr);
+    if (!dc) return false;
+    HFONT font = CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+        DEFAULT_PITCH, name.c_str());
+    if (!font) {
+        ReleaseDC(nullptr, dc);
+        return false;
+    }
+    HGDIOBJ old = SelectObject(dc, font);
+    DWORD bytes = GetFontUnicodeRanges(dc, nullptr);
+    std::vector<BYTE> data(bytes);
+    bool supported = false;
+    if (bytes > 0) {
+        auto* ranges = reinterpret_cast<GLYPHSET*>(data.data());
+        ranges->cbThis = bytes;
+        if (GetFontUnicodeRanges(dc, ranges)) {
+            const wchar_t required[] = { L'中', L'文', L'日', L'本', L'あ', L'ア' };
+            supported = true;
+            for (wchar_t codepoint : required) {
+                bool found = false;
+                for (DWORD i = 0; i < ranges->cRanges && !found; i++) {
+                    const WCRANGE& range = ranges->ranges[i];
+                    found = codepoint >= range.wcLow && codepoint < range.wcLow + range.cGlyphs;
+                }
+                if (!found) {
+                    supported = false;
+                    break;
+                }
+            }
+        }
+    }
+    SelectObject(dc, old);
+    DeleteObject(font);
+    ReleaseDC(nullptr, dc);
+    return supported;
+}
+
+static void on_open_preferences(HWND, HINSTANCE) {
+    imgui_window_show_preferences();
+}
+
 EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
-    g_host.dll_hinst = GetModuleHandle(nullptr);
+    HMODULE dll_hinst = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&RegisterPlugin),
+        &dll_hinst);
+    g_host.dll_hinst = dll_hinst;
 
     static std::wstring s_menu_config = utf8_to_wide(tr_str(u8"配置导入..."));
+    // AviUtl2 expects a Windows file-dialog filter: description, NUL, patterns, NUL, NUL.
+    static constexpr wchar_t k_file_drop_filter[] =
+        L"RPP/MIDI/UTAU Files\0*.rpp;*.mid;*.midi;*.ust;*.ustx\0";
     host->register_object_menu(s_menu_config.c_str(), on_open_config);
-    host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI Input", L"*.rpp;*.mid", on_file_drop);
+    static std::wstring s_menu_preferences = utf8_to_wide(tr_str(u8"首选项..."));
+    host->register_config_menu(s_menu_preferences.c_str(), on_open_preferences);
+    host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI/UTAU Input", k_file_drop_filter, on_file_drop);
     up_register_menu(host);
 
     g_host.edit_handle = host->create_edit_handle();
