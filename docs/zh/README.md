@@ -137,4 +137,9 @@ cmake --build build
 
 ## 许可
 
-MIT License
+AutoZWJ 软件及软件相关文档采用 [MIT License](../../LICENSE) 授权。
+
+标志图稿 [`docs/images/logo.svg`](../images/logo.svg) 及其可编辑源文件
+[`docs/images/autozwj-logo-vector.af`](../images/autozwj-logo-vector.af) 不包含在 MIT
+License 中，单独采用 [CC BY-NC-ND 4.0](../../LICENSE-CC-BY-NC-ND-4.0) 授权。
+资产范围和署名说明见 [`docs/images/README.md`](../images/README.md)。

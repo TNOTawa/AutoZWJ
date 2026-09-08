@@ -139,4 +139,13 @@ If AutoZWJ is useful to you, you can support its continued development through e
 
 ## License
 
-MIT License
+The AutoZWJ software and software-related documentation are licensed under
+the [MIT License](LICENSE).
+
+The logo artwork [`docs/images/logo.svg`](docs/images/logo.svg) and its
+editable source file
+[`docs/images/autozwj-logo-vector.af`](docs/images/autozwj-logo-vector.af) are
+excluded from the MIT License. They are separately licensed under
+[CC BY-NC-ND 4.0](LICENSE-CC-BY-NC-ND-4.0). See
+[`docs/images/README.md`](docs/images/README.md) for the asset scope and
+attribution notice.
