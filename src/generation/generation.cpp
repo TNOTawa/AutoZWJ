@@ -700,7 +700,7 @@ static void emit_animation_sequence(
             go.name_kind = ObjNameKind::Item;
             go.name_index = item_count_global;
             go.name_sub_index = sequence_index == 0
-                ? 0 : static_cast<int>(sequence_index) + 1;
+                ? 0 : static_cast<int>(sequence_index);
         }
         specs.push_back(std::move(go));
         layer_item_counts[use_layer] = layer_count + 1;
@@ -1144,7 +1144,7 @@ GenerationResult generate(const GenerationInput& in) {
                         } else {
                             go.name_kind = ObjNameKind::Item;
                             go.name_index = logical_item_count;
-                            go.name_sub_index = iv.hold_last_frame ? 2 : 0;
+                            go.name_sub_index = iv.hold_last_frame ? 1 : 0;
                         }
                         specs.push_back(go);
                         if (!iv.hold_last_prefix) item_count_global++;

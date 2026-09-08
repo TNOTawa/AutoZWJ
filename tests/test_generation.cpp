@@ -209,8 +209,8 @@ static void test_animation_sequence() {
           res.objects[0].name_index == 0 && res.objects[0].name_sub_index == 0,
           "animation sequence: first child should use the logical item name");
     check(res.objects[1].name_kind == ObjNameKind::Item &&
-          res.objects[1].name_index == 0 && res.objects[1].name_sub_index == 2,
-          "animation sequence: second child should use Item x.2 naming");
+          res.objects[1].name_index == 0 && res.objects[1].name_sub_index == 1,
+          "animation sequence: second child should use Item x.1 naming");
 
     config.sync_mode = 2;
     config.fixed_duration_frames = 30;
@@ -262,8 +262,8 @@ static void test_stretch_hold_last_frame() {
           result.objects[0].name_index == 0 && result.objects[0].name_sub_index == 0,
           "hold-last mode: prefix should use the logical item number");
     check(result.objects[1].name_kind == ObjNameKind::Item &&
-          result.objects[1].name_index == 0 && result.objects[1].name_sub_index == 2,
-          "hold-last mode: continuation should use Item x.2 numbering");
+          result.objects[1].name_index == 0 && result.objects[1].name_sub_index == 1,
+          "hold-last mode: continuation should use Item x.1 numbering");
     check(result.objects[2].name_kind == ObjNameKind::Item &&
           result.objects[2].name_index == 1 && result.objects[2].name_sub_index == 0,
           "hold-last mode: following note should keep its logical item number");
