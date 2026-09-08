@@ -445,6 +445,190 @@ static int assign_layer_impl(double obj_fp, double bf, std::vector<double>& targ
 #pragma GCC diagnostic pop
 #endif
 
+static int map_sequence_frame(int target_sf, int target_ef,
+                              double source_frame, double source_sf,
+                              double source_ef, bool use_round_up) {
+    double source_span = source_ef - source_sf;
+    if (source_span <= 0.0)
+        return target_sf;
+
+    double target_span = static_cast<double>(target_ef - target_sf);
+    double mapped = static_cast<double>(target_sf)
+                  + (source_frame - source_sf) * target_span / source_span;
+    return static_cast<int>(frame_round(mapped, use_round_up));
+}
+
+static std::vector<size_t> animation_sequence_order(
+    std::span<const TemplateSession> templates) {
+    std::vector<size_t> order(templates.size());
+    for (size_t i = 0; i < templates.size(); i++) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        const auto& lhs = templates[a].source;
+        const auto& rhs = templates[b].source;
+        if (lhs.sf != rhs.sf) return lhs.sf < rhs.sf;
+        if (lhs.ef != rhs.ef) return lhs.ef < rhs.ef;
+        return lhs.layer < rhs.layer;
+    });
+    return order;
+}
+
+static int animation_sequence_min_layer(
+    std::span<const TemplateSession> templates) {
+    int min_layer = templates.front().source.layer;
+    for (const auto& tpl : templates)
+        min_layer = std::min(min_layer, tpl.source.layer);
+    return min_layer;
+}
+
+static int animation_sequence_layer_span(
+    std::span<const TemplateSession> templates) {
+    int min_layer = templates.front().source.layer;
+    int max_layer = templates.front().source.layer;
+    for (const auto& tpl : templates) {
+        min_layer = std::min(min_layer, tpl.source.layer);
+        max_layer = std::max(max_layer, tpl.source.layer);
+    }
+    return max_layer - min_layer + 1;
+}
+
+static int assign_sequence_root(double obj_fp, double bf, int layer_span,
+                                std::vector<double>& target, int strategy) {
+    if (layer_span <= 0) layer_span = 1;
+
+    if (strategy == 0) {
+        for (size_t root = 0; root + static_cast<size_t>(layer_span) <= target.size(); root++) {
+            bool free = true;
+            for (int offset = 0; offset < layer_span; offset++) {
+                if (target[root + static_cast<size_t>(offset)] >= obj_fp) {
+                    free = false;
+                    break;
+                }
+            }
+            if (free) {
+                for (int offset = 0; offset < layer_span; offset++)
+                    target[root + static_cast<size_t>(offset)] = bf;
+                return static_cast<int>(root);
+            }
+        }
+
+        int root = static_cast<int>(target.size());
+        target.resize(target.size() + static_cast<size_t>(layer_span), bf);
+        return root;
+    }
+
+    bool all_free = true;
+    for (double b : target) {
+        if (b >= obj_fp) {
+            all_free = false;
+            break;
+        }
+    }
+    int root = all_free ? 0 : static_cast<int>(target.size());
+    if (all_free)
+        target.clear();
+    target.resize(target.size() + static_cast<size_t>(layer_span), bf);
+    return root;
+}
+
+static void emit_animation_sequence(
+    const ItemInterval& group,
+    std::span<const TemplateSession> templates,
+    const ObjDict& objdict,
+    const OutputConfig& config,
+    const TrackNode& track,
+    const SceneInfo& scene,
+    int item_count_global,
+    int total_items,
+    double track_pitch_min,
+    double track_pitch_max,
+    int root_layer,
+    bool is_gap_only,
+    std::map<int, int>& layer_item_counts,
+    std::vector<GeneratedObject>& specs,
+    std::vector<std::string>& warnings)
+{
+    if (templates.empty()) return;
+
+    const auto order = animation_sequence_order(templates);
+    const double source_sf = templates[order.front()].source.sf;
+    const double source_ef = templates[order.back()].source.ef;
+    const int min_layer = animation_sequence_min_layer(templates);
+
+    for (size_t sequence_index = 0; sequence_index < order.size(); sequence_index++) {
+        const size_t tpl_idx = order[sequence_index];
+        const auto& tpl = templates[tpl_idx];
+
+        ItemInterval child = group;
+        if (source_ef <= source_sf) {
+            child.sf = group.sf;
+            child.ef = group.ef;
+        } else {
+            child.sf = map_sequence_frame(group.sf, group.ef, tpl.source.sf, source_sf, source_ef, config.use_round_up);
+            child.ef = map_sequence_frame(group.sf, group.ef, tpl.source.ef, source_sf, source_ef, config.use_round_up);
+        }
+        if (sequence_index == 0) child.sf = group.sf;
+        if (sequence_index + 1 == order.size()) child.ef = group.ef;
+        if (child.ef <= child.sf) child.ef = child.sf + 1;
+        child.obj_fp = static_cast<double>(child.sf);
+        child.bf = static_cast<double>(child.ef);
+
+        int layer_offset = tpl.source.layer - min_layer;
+        int use_layer = root_layer + (config.layer_strategy == 2 ? layer_offset * 2 : layer_offset);
+        int layer_count = layer_item_counts[use_layer];
+        std::vector<PresetEntry> item_presets;
+        if (config.alt_flip && config.flip_type != 0) {
+            int flip_count = config.flip_counter_mode == 0 ? item_count_global : layer_count;
+            PresetEntry p;
+            p.effect_block = build_flip_block(config.flip_type, flip_count);
+            p.position = tpl.presets.empty() ? -1 : tpl.presets[0].position;
+            p.active = true;
+            item_presets.push_back(std::move(p));
+        }
+
+        int pitch_int = static_cast<int>(std::round(group.pitch + 69.0));
+        uint32_t item_rand_seed = static_cast<uint32_t>(
+            group.idx * 100003LL + pitch_int * 10007LL + child.sf * 17LL
+            + static_cast<int>(sequence_index) * 7919LL);
+        auto num_vars = build_item_vars(group.idx, child, objdict,
+                                        config, track, scene, item_count_global,
+                                        total_items, track_pitch_min, track_pitch_max);
+        auto text_vars = build_item_text_vars(group.idx, objdict);
+        auto evaluated_bakes = evaluate_bakes_for_item(
+            tpl.bakes, num_vars, text_vars, item_rand_seed, warnings);
+        std::string chain = apply_template_to_item(
+            tpl.source.chain, evaluated_bakes, item_presets);
+
+        std::ostringstream alias;
+        alias << "[0]\nlayer=" << use_layer
+              << "\nframe=" << child.sf << "," << child.ef
+              << "\noverlay=1\ngroup=1\nclipping=" << config.clipping
+              << "\ncamera=" << config.is_ex_set << "\n"
+              << chain;
+
+        GeneratedObject go;
+        go.layer = use_layer;
+        go.sf = child.sf;
+        go.ef = child.ef;
+        go.alias_chain = alias.str();
+        if (!group.file_path.empty()) {
+            go.name_kind = ObjNameKind::FilePath;
+            go.name_text = group.file_path;
+            size_t sep = go.name_text.find_last_of('\\');
+            if (sep != std::string::npos) go.name_text = go.name_text.substr(sep + 1);
+        } else if (is_gap_only) {
+            go.name_kind = ObjNameKind::Gap;
+            go.name_index = item_count_global;
+        } else {
+            go.name_kind = ObjNameKind::Item;
+            go.name_index = item_count_global;
+            go.name_sub_index = sequence_index == 0
+                ? 0 : static_cast<int>(sequence_index) + 1;
+        }
+        specs.push_back(std::move(go));
+        layer_item_counts[use_layer] = layer_count + 1;
+    }
+}
+
 GenerationResult generate(const GenerationInput& in) {
     std::vector<GeneratedObject> specs;
     std::vector<std::string> warnings;
@@ -646,7 +830,15 @@ GenerationResult generate(const GenerationInput& in) {
                             pbpos = iv.sf;
 
                             auto& ptarget = (config.layer_strategy == 2 && par == 1) ? popt2 : popt;
-                            int dl = assign_layer_impl((double)iv.sf, (double)iv.ef, ptarget, config.layer_strategy);
+                            int dl;
+                            if (config.mapping_strategy == 4 && in.templates.size() > 1) {
+                                dl = assign_sequence_root(
+                                    static_cast<double>(iv.sf), static_cast<double>(iv.ef),
+                                    animation_sequence_layer_span(in.templates), ptarget,
+                                    config.layer_strategy);
+                            } else {
+                                dl = assign_layer_impl((double)iv.sf, (double)iv.ef, ptarget, config.layer_strategy);
+                            }
                             pre_layers.push_back(dl);
                         }
                         if (!pre_layers.empty()) {
@@ -666,6 +858,39 @@ GenerationResult generate(const GenerationInput& in) {
                         int par = (bfidx_global + item_count_global) % 2;
 
                         bpos_global = iv.sf;
+
+                        if (config.mapping_strategy == 4 && pool_size > 1) {
+                            auto& target = (config.layer_strategy == 2 && par == 1) ? opt_layer2 : opt_layer;
+                            int add_layer = assign_sequence_root(
+                                static_cast<double>(iv.sf), static_cast<double>(iv.ef),
+                                animation_sequence_layer_span(in.templates), target,
+                                config.layer_strategy);
+
+                            if (config.reverse_layer_order)
+                                add_layer = max_layer - add_layer;
+
+                            if (config.track_filter_mode != 0) {
+                                int dl = pre_layers[iv_idx];
+                                if ((config.track_filter_mode == 1 && dl + 1 != config.track_filter_n) ||
+                                    (config.track_filter_mode == 2 && dl != max_layer - config.track_filter_n + 1)) {
+                                    item_count_global++;
+                                    continue;
+                                }
+                            }
+
+                            int root_layer;
+                            if (config.layer_strategy == 2)
+                                root_layer = base + (par == 0 ? add_layer * 2 : add_layer * 2 + 1);
+                            else
+                                root_layer = base + add_layer;
+
+                            emit_animation_sequence(
+                                iv, in.templates, objdict, config, tracks[ti], in.scene,
+                                item_count_global, total_items, track_pitch_min, track_pitch_max,
+                                root_layer, is_gap_only, layer_item_counts, specs, warnings);
+                            item_count_global++;
+                            continue;
+                        }
 
                         int tpl_idx = 0;
                         if (pool_size > 1) {

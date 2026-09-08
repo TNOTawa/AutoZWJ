@@ -36,7 +36,7 @@ Import media items from REAPER project files (`.rpp`), standard MIDI files (`.mi
 
 - Parse REAPER `.rpp` / standard MIDI `.mid` / LRC `.lrc` files
 - Use existing timeline objects as style templates, inheriting their effect chains and parameters
-- Multi-source mapping: assign multiple templates using configurable strategies (sequential rotation / random selection / chord mapping)
+- Multi-source mapping: assign multiple templates using configurable strategies (sequential rotation / random selection / chord mapping / animation sequence)
 - Effect chain editor: view template effect chains and bake parameters with fixed values / variable mappings / evaluated expressions
 - Script variable system: drive bake values with expressions such as `$note.velocity$ / 127 * 200`
 - BPM grid sync: apply MIDI/RPP tempo maps to AviUtl2's BPM grid

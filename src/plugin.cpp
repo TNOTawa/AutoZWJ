@@ -173,6 +173,9 @@ static void gen_edit_callback(void* param, EDIT_SECTION* edit) {
                     break;
                 case ObjNameKind::Item:
                     nm = utf8_to_wide(tr_str(u8"Item")) + L" " + std::to_wstring(s.name_index);
+                    if (s.name_sub_index > 0) {
+                        nm += L"." + std::to_wstring(s.name_sub_index);
+                    }
                     break;
             }
             edit->set_object_name(obj, nm.c_str());
