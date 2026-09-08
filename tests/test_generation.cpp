@@ -141,9 +141,51 @@ static void test_gap_round_up() {
           "gap mode + ceil: note.start_frame var should match sf (32)");
 }
 
+static void test_animation_sequence() {
+    auto objdict = make_objdict();
+    objdict.pos = { -1.0, 0.0 };
+    objdict.length = { 0.0, 2.0 };
+    auto tracks = make_tracks();
+    auto templates = make_templates();
+    templates[0].source.sf = 10.0;
+    templates[0].source.ef = 19;
+    templates[0].source.layer = 3;
+    templates[0].source.chain = "[0.0]\neffect.name=first\n\n";
+
+    TemplateSession second = templates[0];
+    second.source.sf = 25.0;
+    second.source.ef = 39;
+    second.source.layer = 5;
+    second.source.chain = "[0.0]\neffect.name=second\n\n";
+    templates.push_back(second);
+
+    OutputConfig config;
+    config.mapping_strategy = 4;
+    config.sync_mode = 0;
+    SceneInfo scene;
+    auto res = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
+
+    check(res.objects.size() == 2, "animation sequence: two child objects expected");
+    check(res.objects[0].sf == 1 && res.objects[0].ef == 38,
+          "animation sequence: first child should preserve relative duration");
+    check(res.objects[1].sf == 63 && res.objects[1].ef == 120,
+          "animation sequence: last child should end at the unified note range");
+    check(res.objects[1].sf - res.objects[0].ef - 1 == 24,
+          "animation sequence: gap should be scaled with the sequence");
+    check(res.objects[0].layer == 1 && res.objects[1].layer == 3,
+          "animation sequence: relative template layer offset should be preserved");
+
+    config.sync_mode = 2;
+    config.fixed_duration_frames = 30;
+    auto fixed = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
+    check(fixed.objects.size() == 2 && fixed.objects[0].sf == 1 && fixed.objects[1].ef == 30,
+          "animation sequence: fixed sync should resize the whole sequence range");
+}
+
 int main() {
     test_round_up();
     test_gap_round_up();
+    test_animation_sequence();
 
     auto objdict = make_objdict();
     auto tracks = make_tracks();
