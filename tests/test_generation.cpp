@@ -2,6 +2,7 @@
 #include "core/generation_model.h"
 #include "core/effect_model.h"
 #include "core/output_config.h"
+#include "chain/motion_value.h"
 #include "generation/generation.h"
 #include <cstdlib>
 #include <cstdio>
@@ -131,7 +132,7 @@ static void test_gap_round_up() {
 
     SceneInfo scene;
     OutputConfig config;
-    config.sync_mode = 3;
+    config.sync_mode = SYNC_MODE_GAP;
     config.use_round_up = true;
 
     auto res = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
@@ -159,7 +160,7 @@ static void test_stretch_next_chord() {
     auto templates = make_templates();
     SceneInfo scene;
     OutputConfig config;
-    config.sync_mode = 1;
+    config.sync_mode = SYNC_MODE_NEXT;
     config.use_round_up = true;
 
     auto res = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
@@ -169,6 +170,18 @@ static void test_stretch_next_chord() {
     check(res.objects[0].ef == 30 && res.objects[1].ef == 30,
           "stretch-next chord: all chord notes should stretch to the next note group");
     check(res.objects[2].sf == 31, "stretch-next chord: next group start frame mismatch");
+}
+
+static void test_motion_value_compatibility() {
+    std::string start;
+    std::string end;
+    std::string rest;
+    check(chain_parse_motion_value("0,100,1", &start, &end, &rest),
+          "motion values: legacy three-field editor format should remain recognized");
+    check(chain_parse_motion_value("0,100,1,0", &start, &end, &rest, true),
+          "motion values: strict four-field format should be recognized for freeze mode");
+    check(!chain_parse_motion_value("255,0,0,255", &start, &end, &rest, true),
+          "motion values: RGBA values should not be treated as motion");
 }
 
 static void test_animation_sequence() {
@@ -191,8 +204,8 @@ static void test_animation_sequence() {
     templates.push_back(second);
 
     OutputConfig config;
-    config.mapping_strategy = 4;
-    config.sync_mode = 0;
+    config.mapping_strategy = MAPPING_STRATEGY_ANIMATION_SEQUENCE;
+    config.sync_mode = SYNC_MODE_NOTE;
     SceneInfo scene;
     auto res = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
 
@@ -212,7 +225,7 @@ static void test_animation_sequence() {
           res.objects[1].name_index == 0 && res.objects[1].name_sub_index == 1,
           "animation sequence: second child should use Item x.1 naming");
 
-    config.sync_mode = 2;
+    config.sync_mode = SYNC_MODE_FIXED;
     config.fixed_duration_frames = 30;
     auto fixed = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
     check(fixed.objects.size() == 2 && fixed.objects[0].sf == 1 && fixed.objects[1].ef == 30,
@@ -233,7 +246,7 @@ static void test_stretch_hold_last_frame() {
     auto tracks = make_tracks();
     tracks[0].count = 2;
     auto templates = make_templates();
-    templates[0].source.chain = "[0.0]\neffect.name=test_effect\n位置=0,100,1,0\nnote_idx=0\n\n";
+    templates[0].source.chain = "[0.0]\neffect.name=test_effect\n颜色=255,0,0\n位置=0,100,1,0\nnote_idx=0\n\n";
     ParamBake index_bake;
     index_bake.effect_index = 0;
     index_bake.param_name = "note_idx";
@@ -277,6 +290,8 @@ static void test_stretch_hold_last_frame() {
           "hold-last mode: alternating flip should count continuation with its prefix");
     check(result.objects[1].alias_chain.find("位置=100") != std::string::npos,
           "hold-last mode: continuation should hold the motion end value");
+    check(result.objects[1].alias_chain.find("颜色=255,0,0") != std::string::npos,
+          "hold-last mode: continuation should preserve non-motion color values");
     check(result.objects[1].alias_chain.find("位置=0,100,1,0") == std::string::npos,
           "hold-last mode: continuation should remove motion rules");
     check(result.objects[2].sf == 181 && result.objects[2].ef == 195,
@@ -315,6 +330,7 @@ static void test_stretch_hold_last_frame_chord_boundary() {
 
 int main() {
     test_round_up();
+    test_motion_value_compatibility();
     test_gap_round_up();
     test_stretch_next_chord();
     test_animation_sequence();

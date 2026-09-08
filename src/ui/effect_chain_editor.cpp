@@ -6,6 +6,7 @@
 #include "plugin.h"
 #include "chain/template_chain.h"
 #include "effect/effect_dict.h"
+#include "chain/motion_value.h"
 #include <cstring>
 #include <map>
 #include <set>
@@ -133,39 +134,6 @@ static bool is_hidden_param(const std::string& name) {
     if (name.find(u8"のプリセット") != std::string::npos) return true;
     if (name.find("Preset") != std::string::npos) return true;
     return false;
-}
-
-static bool parse_motion_value(const std::string& val,
-                                std::string* out_start,
-                                std::string* out_end,
-                                std::string* out_rest)
-{
-    size_t c1 = val.find(',');
-    if (c1 == std::string::npos) return false;
-    size_t c2 = val.find(',', c1 + 1);
-    if (c2 == std::string::npos) return false;
-
-    std::string start = val.substr(0, c1);
-    std::string end = val.substr(c1 + 1, c2 - c1 - 1);
-
-    auto trim = [](std::string& s) {
-        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
-        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
-    };
-    trim(start);
-    trim(end);
-
-    try {
-        std::stod(start);
-        std::stod(end);
-    } catch (...) {
-        return false;
-    }
-
-    if (out_start) *out_start = start;
-    if (out_end) *out_end = end;
-    if (out_rest) *out_rest = val.substr(c2);
-    return true;
 }
 
 static int find_or_create_bake(int effect_index, const std::string& param_name,
@@ -598,7 +566,7 @@ void render_effect_chain_panel() {
                     std::string motion_start, motion_end, motion_rest;
                     bool is_comma_motion = false;
                     if (!has_dot1_end) {
-                        is_comma_motion = parse_motion_value(param.second, &motion_start, &motion_end, &motion_rest);
+                        is_comma_motion = chain_parse_motion_value(param.second, &motion_start, &motion_end, &motion_rest);
                     }
 
                     ImGui::PushID((int)(item.effect_index * 1000 + pi));

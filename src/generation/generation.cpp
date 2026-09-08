@@ -1,8 +1,8 @@
 #include "generation/generation.h"
 #include "script/expr_evaluator.h"
 #include "script/variable_subst.h"
+#include "chain/motion_value.h"
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 
 static double frame_round(double v, bool use_round_up) {
@@ -25,7 +25,6 @@ static std::vector<int> generate_shuffled_order(int pool_size, uint32_t seed) {
 #include <format>
 #include <map>
 #include <unordered_map>
-#include <cstdlib>
 
 struct ItemInterval {
     size_t idx;
@@ -167,20 +166,6 @@ static void inject_param_bakes(std::string& chain, const std::vector<ParamBake>&
     }
 }
 
-static std::string trim_motion_token(std::string value) {
-    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) value.erase(value.begin());
-    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) value.pop_back();
-    return value;
-}
-
-static bool is_number_token(const std::string& value) {
-    std::string token = trim_motion_token(value);
-    if (token.empty()) return false;
-    char* end = nullptr;
-    std::strtod(token.c_str(), &end);
-    return end != token.c_str() && *end == '\0';
-}
-
 // Convert animated parameters to their final values for the continuation object.
 static void hold_last_motion_values(std::string& chain) {
     struct Line {
@@ -210,21 +195,18 @@ static void hold_last_motion_values(std::string& chain) {
             current.key.substr(current.key.size() - 2) == ".1";
         if (current.key.empty() || current.key == "effect.name" || is_pair_endpoint) continue;
 
-        size_t c1 = current.value.find(',');
-        size_t c2 = c1 == std::string::npos ? std::string::npos : current.value.find(',', c1 + 1);
-        if (c2 != std::string::npos &&
-            is_number_token(current.value.substr(0, c1)) &&
-            is_number_token(current.value.substr(c1 + 1, c2 - c1 - 1))) {
-            current.value = trim_motion_token(current.value.substr(c1 + 1, c2 - c1 - 1));
+        std::string motion_end;
+        if (chain_parse_motion_value(current.value, nullptr, &motion_end, nullptr, true)) {
+            current.value = motion_end;
             continue;
         }
 
-        if (!is_number_token(current.value)) continue;
+        if (!chain_is_number_token(current.value)) continue;
         std::string end_key = current.key + ".1";
         for (size_t j = i + 1; j < lines.size(); j++) {
             if (raw_lines[j].rfind("[0.", 0) == 0) break;
-            if (lines[j].key == end_key && is_number_token(lines[j].value)) {
-                current.value = trim_motion_token(lines[j].value);
+            if (lines[j].key == end_key && chain_is_number_token(lines[j].value)) {
+                current.value = chain_trim_motion_token(lines[j].value);
                 lines[j].removed = true;
                 break;
             }
@@ -712,7 +694,7 @@ GenerationResult generate(const GenerationInput& in) {
     std::vector<std::string> warnings;
 
     std::vector<int> shuffled_order;
-    if (in.config.mapping_strategy == 1 && in.config.mapping_sequential_order == 2 && in.templates.size() > 1) {
+    if (in.config.mapping_strategy == MAPPING_STRATEGY_SEQUENTIAL && in.config.mapping_sequential_order == 2 && in.templates.size() > 1) {
         shuffled_order = generate_shuffled_order(static_cast<int>(in.templates.size()), in.seed);
     }
 
@@ -793,7 +775,7 @@ GenerationResult generate(const GenerationInput& in) {
                         // 拉伸到下一音符时，必须跳过同一输出帧内的和弦音符，
                         // 否则同一和弦中只有最后一个音符会真正拉伸。
                         double next_stretch_fp = next_fp;
-                        if (config.sync_mode == 1 && next_stretch_fp > 0) {
+                        if (config.sync_mode == SYNC_MODE_NEXT && next_stretch_fp > 0) {
                             next_stretch_fp = -1;
                             for (size_t next = k + 1; next < i; next++) {
                                 if (objdict.pos[next] <= -0.5) break;
@@ -945,7 +927,7 @@ GenerationResult generate(const GenerationInput& in) {
 
                             auto& ptarget = (config.layer_strategy == 2 && par == 1) ? popt2 : popt;
                             int dl;
-                            if (config.mapping_strategy == 4 && in.templates.size() > 1) {
+                            if (config.mapping_strategy == MAPPING_STRATEGY_ANIMATION_SEQUENCE && in.templates.size() > 1) {
                                 dl = assign_sequence_root(
                                     static_cast<double>(iv.sf), static_cast<double>(iv.ef),
                                     animation_sequence_layer_span(in.templates), ptarget,
@@ -973,7 +955,7 @@ GenerationResult generate(const GenerationInput& in) {
 
                         bpos_global = iv.sf;
 
-                        if (config.mapping_strategy == 4 && pool_size > 1) {
+                        if (config.mapping_strategy == MAPPING_STRATEGY_ANIMATION_SEQUENCE && pool_size > 1) {
                             auto& target = (config.layer_strategy == 2 && par == 1) ? opt_layer2 : opt_layer;
                             int add_layer = assign_sequence_root(
                                 static_cast<double>(iv.sf), static_cast<double>(iv.ef),

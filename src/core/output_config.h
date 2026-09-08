@@ -8,6 +8,11 @@ enum FlipType {
     FLIP_CCW = 4,
 };
 
+constexpr int MAPPING_STRATEGY_SEQUENTIAL = 1;
+constexpr int MAPPING_STRATEGY_RANDOM = 2;
+constexpr int MAPPING_STRATEGY_CHORD = 3;
+constexpr int MAPPING_STRATEGY_ANIMATION_SEQUENCE = 4;
+
 constexpr int SYNC_MODE_NOTE = 0;
 constexpr int SYNC_MODE_NEXT = 1;
 constexpr int SYNC_MODE_FIXED = 2;
@@ -26,14 +31,14 @@ struct OutputConfig {
     int clipping = 0;
     int is_ex_set = 0;
 
-    int sync_mode = 1;
+    int sync_mode = SYNC_MODE_NEXT;
     int fixed_duration_frames = 30;
     int layer_strategy = 0;
     bool reverse_layer_order = false;
     int track_filter_mode = 0;
     int track_filter_n = 1;
 
-    int mapping_strategy = 1;
+    int mapping_strategy = MAPPING_STRATEGY_SEQUENTIAL;
     int mapping_sequential_order = 0;
     bool mapping_no_consecutive = false;
 

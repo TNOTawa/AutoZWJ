@@ -59,11 +59,12 @@ void load_project_state_from_project_file(EDIT_SECTION* edit, AppState& app, con
     val = pf->get_param_string("rppinexo.is_ex_set");
     if (val) cfg.is_ex_set = std::atoi(val);
     val = pf->get_param_string("rppinexo.sync_mode");
-    if (val) cfg.sync_mode = std::atoi(val);
+    if (val) cfg.sync_mode = std::clamp(std::atoi(val), SYNC_MODE_NOTE, SYNC_MODE_STRETCH_HOLD_LAST);
     val = pf->get_param_string("rppinexo.fixed_duration_frames");
     if (val) cfg.fixed_duration_frames = std::max(1, std::atoi(val));
     val = pf->get_param_string("rppinexo.mapping_strategy");
-    if (val) cfg.mapping_strategy = std::atoi(val);
+    if (val) cfg.mapping_strategy = std::clamp(
+        std::atoi(val), MAPPING_STRATEGY_SEQUENTIAL, MAPPING_STRATEGY_ANIMATION_SEQUENCE);
     val = pf->get_param_string("rppinexo.mapping_sequential_order");
     if (val) cfg.mapping_sequential_order = std::atoi(val);
     val = pf->get_param_string("rppinexo.mapping_no_consecutive");
