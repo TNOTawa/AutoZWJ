@@ -197,21 +197,32 @@ static void parse_rpp_midi_line(const std::vector<std::string>& parts,
     }
 
     if (parts[0] != "E" && parts[0] != "e") return;
-    if (parts.size() < 5) return;
+    if (parts.size() < 2) return;
 
     uint64_t delta = 0;
+    if (!parse_unsigned_token(parts[1], 10, delta)) return;
+    current_tick += delta;
+
+    // REAPER may emit short MIDI events. They still advance the running tick,
+    // but cannot participate in note decoding without all event bytes.
+    if (parts.size() < 5) return;
+
     uint64_t status = 0;
     uint64_t data1 = 0;
     uint64_t data2 = 0;
-    if (!parse_unsigned_token(parts[1], 10, delta) ||
-        !parse_unsigned_token(parts[2], 16, status) ||
+    if (!parse_unsigned_token(parts[2], 16, status) ||
         !parse_unsigned_token(parts[3], 16, data1) ||
         !parse_unsigned_token(parts[4], 16, data2) ||
         status > 0xFF || data1 > 0xFF || data2 > 0xFF) {
         return;
     }
 
-    current_tick += delta;
+    // Channel voice messages use 7-bit data bytes. Reject malformed values
+    // before they can be used as note/controller array indices.
+    if (status >= 0x80 && status <= 0xEF && (data1 > 0x7F || data2 > 0x7F)) {
+        return;
+    }
+
     source.events.push_back({current_tick,
         static_cast<uint8_t>(status), static_cast<uint8_t>(data1), static_cast<uint8_t>(data2)});
 }
@@ -333,6 +344,13 @@ static std::vector<RppMidiNote> decode_rpp_midi_notes(
     for (const auto& event : source.events) {
         uint8_t type = static_cast<uint8_t>((event.status >> 4) & 0x0F);
         uint8_t channel = static_cast<uint8_t>(event.status & 0x0F);
+
+        // Metadata may be supplied by callers other than the RPP reader.
+        // Keep malformed channel data from becoming an array index.
+        if (event.status >= 0x80 && event.status <= 0xEF &&
+            (event.data1 > 0x7F || event.data2 > 0x7F)) {
+            continue;
+        }
 
         if (type == 0x9 && event.data2 > 0) {
             pending[channel][event.data1].push_back({

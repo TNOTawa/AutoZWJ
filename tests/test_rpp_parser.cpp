@@ -36,6 +36,8 @@ LENGTH 2
 PLAYRATE 1 0 0
 <SOURCE MIDI
 HASDATA 1 480 QN
+E 480 c0 01
+E 0 90 ff 64
 E 0 90 3c 64
 E 480 80 3c 00
 E 240 90 40 7f
@@ -117,9 +119,9 @@ static void test_note_mode(const std::string& path) {
     check(tracks[0].count == 4 && tracks[1].count == 1,
           "note mode should expand notes without losing track boundaries");
     check(objdict.pos.size() == 7, "note mode should produce five items and one separator");
-    check(close_to(objdict.pos[1], 1.0), "first note position mismatch");
+    check(close_to(objdict.pos[1], 1.5), "short event tick handling mismatch");
     check(close_to(objdict.length[1], 0.5), "first note length mismatch");
-    check(close_to(objdict.pos[2], 1.75), "second note position mismatch");
+    check(close_to(objdict.pos[2], 2.25), "second note position mismatch");
     check(close_to(objdict.length[2], 0.25), "second note length mismatch");
     check(objdict.midi_note[1] == 60, "first note number mismatch");
     check(objdict.midi_note[2] == 64, "second note number mismatch");
