@@ -2,6 +2,7 @@
 #include "script/expr_evaluator.h"
 #include "script/variable_subst.h"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 static double frame_round(double v, bool use_round_up) {
@@ -24,6 +25,7 @@ static std::vector<int> generate_shuffled_order(int pool_size, uint32_t seed) {
 #include <format>
 #include <map>
 #include <unordered_map>
+#include <cstdlib>
 
 struct ItemInterval {
     size_t idx;
@@ -37,6 +39,8 @@ struct ItemInterval {
     std::string file_path;
     int chord_index = 1;
     int chord_count = 1;
+    bool hold_last_frame = false;
+    bool hold_last_prefix = false;
 };
 
 static int pick_template_index(int item_count_global, int chord_index, int pool_size,
@@ -161,6 +165,80 @@ static void inject_param_bakes(std::string& chain, const std::vector<ParamBake>&
             inject_single_param(chain, pb, sec_pos, sec_end);
         }
     }
+}
+
+static std::string trim_motion_token(std::string value) {
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) value.erase(value.begin());
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) value.pop_back();
+    return value;
+}
+
+static bool is_number_token(const std::string& value) {
+    std::string token = trim_motion_token(value);
+    if (token.empty()) return false;
+    char* end = nullptr;
+    std::strtod(token.c_str(), &end);
+    return end != token.c_str() && *end == '\0';
+}
+
+// Convert animated parameters to their final values for the continuation object.
+static void hold_last_motion_values(std::string& chain) {
+    struct Line {
+        std::string key;
+        std::string value;
+        bool removed = false;
+    };
+
+    std::vector<Line> lines;
+    std::vector<std::string> raw_lines;
+    std::istringstream input(chain);
+    std::string line;
+    while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        raw_lines.push_back(line);
+        size_t eq = line.find('=');
+        if (eq == std::string::npos || line.rfind("[0.", 0) == 0) {
+            lines.push_back({});
+        } else {
+            lines.push_back({line.substr(0, eq), line.substr(eq + 1), false});
+        }
+    }
+
+    for (size_t i = 0; i < lines.size(); i++) {
+        auto& current = lines[i];
+        bool is_pair_endpoint = current.key.size() > 2 &&
+            current.key.substr(current.key.size() - 2) == ".1";
+        if (current.key.empty() || current.key == "effect.name" || is_pair_endpoint) continue;
+
+        size_t c1 = current.value.find(',');
+        size_t c2 = c1 == std::string::npos ? std::string::npos : current.value.find(',', c1 + 1);
+        if (c2 != std::string::npos &&
+            is_number_token(current.value.substr(0, c1)) &&
+            is_number_token(current.value.substr(c1 + 1, c2 - c1 - 1))) {
+            current.value = trim_motion_token(current.value.substr(c1 + 1, c2 - c1 - 1));
+            continue;
+        }
+
+        if (!is_number_token(current.value)) continue;
+        std::string end_key = current.key + ".1";
+        for (size_t j = i + 1; j < lines.size(); j++) {
+            if (raw_lines[j].rfind("[0.", 0) == 0) break;
+            if (lines[j].key == end_key && is_number_token(lines[j].value)) {
+                current.value = trim_motion_token(lines[j].value);
+                lines[j].removed = true;
+                break;
+            }
+        }
+    }
+
+    std::ostringstream output;
+    for (size_t i = 0; i < raw_lines.size(); i++) {
+        if (lines[i].removed) continue;
+        if (!lines[i].key.empty()) output << lines[i].key << "=" << lines[i].value;
+        else output << raw_lines[i];
+        if (i + 1 < raw_lines.size()) output << '\n';
+    }
+    chain = output.str();
 }
 
 static void inject_presets(std::string& chain, const std::vector<PresetEntry>& presets) {
@@ -731,7 +809,7 @@ GenerationResult generate(const GenerationInput& in) {
 
                         double bf = obj_fp + obj_fl - 1;
 
-                        bool stretch_next = (config.sync_mode == 1);
+                        bool stretch_next = (config.sync_mode == SYNC_MODE_NEXT);
                         if (stretch_next && next_stretch_fp > 0) {
                             double rounded_bf = frame_round(bf, config.use_round_up);
                             double rounded_next = frame_round(next_stretch_fp, config.use_round_up);
@@ -739,7 +817,7 @@ GenerationResult generate(const GenerationInput& in) {
                         }
 
                         int ef;
-                        bool use_fixed = (config.sync_mode == 2 || config.sync_mode == 4);
+                        bool use_fixed = (config.sync_mode == SYNC_MODE_FIXED || config.sync_mode == SYNC_MODE_GAP_FIXED);
                         if (use_fixed) {
                             ef = sf + config.fixed_duration_frames - 1;
                         } else {
@@ -747,7 +825,7 @@ GenerationResult generate(const GenerationInput& in) {
                             if (ef <= sf) ef = sf + 1;
                             // 相邻音符：仅在输出帧域存在恰好 1 帧缝隙时补平（ef = next_sf - 2 时），
                             // 避免向上取整下把亚帧缝误判为 1 帧缝造成重叠
-                            if (next_fp > 0 && config.sync_mode != 1) {
+                            if (next_fp > 0 && config.sync_mode != SYNC_MODE_NEXT) {
                                 int next_sf = (int)frame_round(next_fp, config.use_round_up);
                                 if (next_sf < 1) next_sf = 1;
                                 if (next_sf - ef == 2) ef = next_sf - 1;
@@ -781,6 +859,42 @@ GenerationResult generate(const GenerationInput& in) {
                         for (auto& iv : intervals) { iv.chord_index = 1; iv.chord_count = 1; }
                     }
 
+                    if (config.sync_mode == SYNC_MODE_STRETCH_HOLD_LAST) {
+                        std::vector<ItemInterval> expanded;
+                        expanded.reserve(intervals.size() * 2);
+                        for (size_t n = 0; n < intervals.size(); n++) {
+                            const auto& source = intervals[n];
+                            int note_frames = source.ef - source.sf + 1;
+                            if (note_frames <= config.fixed_duration_frames) {
+                                expanded.push_back(source);
+                                continue;
+                            }
+
+                            ItemInterval prefix = source;
+                            prefix.ef = prefix.sf + config.fixed_duration_frames - 1;
+                            prefix.bf = static_cast<double>(prefix.ef);
+
+                            ItemInterval tail = source;
+                            tail.sf = prefix.ef + 1;
+                            int tail_ef = source.ef;
+                            if (n + 1 < intervals.size() && intervals[n + 1].sf > tail.sf) {
+                                tail_ef = intervals[n + 1].sf - 1;
+                            }
+                            expanded.push_back(prefix);
+                            if (tail_ef >= tail.sf) {
+                                prefix.hold_last_prefix = true;
+                                expanded.back().hold_last_prefix = true;
+                                tail.obj_fp = static_cast<double>(tail.sf);
+                                tail.bf = static_cast<double>(tail_ef);
+                                tail.ef = tail_ef;
+                                tail.pos_sec = (tail.sf - 1.0) / fps;
+                                tail.hold_last_frame = true;
+                                expanded.push_back(tail);
+                            }
+                        }
+                        intervals = std::move(expanded);
+                    }
+
                     double track_pitch_min = 128.0, track_pitch_max = -1.0;
                     for (const auto& iv : intervals) {
                         if (iv.pitch > -900.0) {
@@ -791,7 +905,7 @@ GenerationResult generate(const GenerationInput& in) {
                     }
                     if (track_pitch_max < 0) { track_pitch_min = 0; track_pitch_max = 0; }
 
-                    bool is_gap_only = (config.sync_mode == 3 || config.sync_mode == 4);
+                    bool is_gap_only = (config.sync_mode == SYNC_MODE_GAP || config.sync_mode == SYNC_MODE_GAP_FIXED);
                     if (is_gap_only) {
                         std::vector<ItemInterval> gaps;
                         for (size_t g = 0; g + 1 < intervals.size(); g++) {
@@ -799,7 +913,7 @@ GenerationResult generate(const GenerationInput& in) {
                             int gap_ef = intervals[g + 1].sf - 1;
                             if (gap_ef >= gap_sf) {
                                 int gap_ef_final;
-                                if (config.sync_mode == 4) {
+                                if (config.sync_mode == SYNC_MODE_GAP_FIXED) {
                                     gap_ef_final = gap_sf + config.fixed_duration_frames - 1;
                                     if (gap_ef_final > gap_ef) gap_ef_final = gap_ef;
                                 } else {
@@ -873,7 +987,7 @@ GenerationResult generate(const GenerationInput& in) {
                                 int dl = pre_layers[iv_idx];
                                 if ((config.track_filter_mode == 1 && dl + 1 != config.track_filter_n) ||
                                     (config.track_filter_mode == 2 && dl != max_layer - config.track_filter_n + 1)) {
-                                    item_count_global++;
+                                    if (!iv.hold_last_prefix) item_count_global++;
                                     continue;
                                 }
                             }
@@ -888,14 +1002,17 @@ GenerationResult generate(const GenerationInput& in) {
                                 iv, in.templates, objdict, config, tracks[ti], in.scene,
                                 item_count_global, total_items, track_pitch_min, track_pitch_max,
                                 root_layer, is_gap_only, layer_item_counts, specs, warnings);
-                            item_count_global++;
+                            if (!iv.hold_last_prefix) item_count_global++;
                             continue;
                         }
 
+                        int logical_item_count = item_count_global;
                         int tpl_idx = 0;
-                        if (pool_size > 1) {
+                        if (iv.hold_last_frame && prev_tpl_idx >= 0) {
+                            tpl_idx = prev_tpl_idx;
+                        } else if (pool_size > 1) {
                             tpl_idx = pick_template_index(
-                                item_count_global, iv.chord_index, pool_size,
+                                logical_item_count, iv.chord_index, pool_size,
                                 config.mapping_strategy, config, prev_tpl_idx,
                                 shuffled_order, in.seed);
                         }
@@ -906,7 +1023,7 @@ GenerationResult generate(const GenerationInput& in) {
                         int pitch_int = static_cast<int>(std::round(iv.pitch + 69.0));
                         uint32_t item_rand_seed = static_cast<uint32_t>(iv.idx * 100003LL + pitch_int * 10007LL + iv.sf * 17LL);
                         auto num_vars = build_item_vars(iv.idx, iv, objdict, config, tracks[ti], in.scene,
-                                                         item_count_global, total_items,
+                                                         logical_item_count, total_items,
                                                          track_pitch_min, track_pitch_max);
                         auto text_vars = build_item_text_vars(iv.idx, objdict);
                         auto evaluated_bakes = evaluate_bakes_for_item(tpl_bakes, num_vars, text_vars, item_rand_seed, warnings);
@@ -915,7 +1032,7 @@ GenerationResult generate(const GenerationInput& in) {
                         int use_layer;
 
                         if (config.flip_counter_mode == 0) {
-                            int flip_count = item_count_global;
+                            int flip_count = logical_item_count;
                             if (config.alt_flip && config.flip_type != 0) {
                                 PresetEntry p;
                                 p.effect_block = build_flip_block(config.flip_type, flip_count);
@@ -939,11 +1056,11 @@ GenerationResult generate(const GenerationInput& in) {
                             if (config.track_filter_mode != 0) {
                                 int dl = pre_layers[iv_idx];
                                 if (config.track_filter_mode == 1 && dl + 1 != config.track_filter_n) {
-                                    item_count_global++;
+                                    if (!iv.hold_last_prefix) item_count_global++;
                                     continue;
                                 }
                                 if (config.track_filter_mode == 2 && dl != max_layer - config.track_filter_n + 1) {
-                                    item_count_global++;
+                                    if (!iv.hold_last_prefix) item_count_global++;
                                     continue;
                                 }
                             }
@@ -963,11 +1080,11 @@ GenerationResult generate(const GenerationInput& in) {
                             if (config.track_filter_mode != 0) {
                                 int dl = pre_layers[iv_idx];
                                 if (config.track_filter_mode == 1 && dl + 1 != config.track_filter_n) {
-                                    item_count_global++;
+                                    if (!iv.hold_last_prefix) item_count_global++;
                                     continue;
                                 }
                                 if (config.track_filter_mode == 2 && dl != max_layer - config.track_filter_n + 1) {
-                                    item_count_global++;
+                                    if (!iv.hold_last_prefix) item_count_global++;
                                     continue;
                                 }
                             }
@@ -980,7 +1097,8 @@ GenerationResult generate(const GenerationInput& in) {
                             int layer_count = layer_item_counts[use_layer];
                             if (config.alt_flip && config.flip_type != 0) {
                                 PresetEntry p;
-                                p.effect_block = build_flip_block(config.flip_type, layer_count);
+                                int flip_count = iv.hold_last_frame ? std::max(0, layer_count - 1) : layer_count;
+                                p.effect_block = build_flip_block(config.flip_type, flip_count);
                                 const auto& tpl_presets_ref = in.templates[tpl_idx].presets;
                                 if (!tpl_presets_ref.empty()) {
                                     p.position = tpl_presets_ref[0].position;
@@ -990,11 +1108,16 @@ GenerationResult generate(const GenerationInput& in) {
                                 p.active = true;
                                 item_presets.push_back(p);
                             }
-                            layer_item_counts[use_layer] = layer_count + 1;
+                            if (!iv.hold_last_frame) {
+                                layer_item_counts[use_layer] = layer_count + 1;
+                            }
                         }
 
                         std::string chain = apply_template_to_item(
                             tpl_chain, evaluated_bakes, item_presets);
+                        if (iv.hold_last_frame) {
+                            hold_last_motion_values(chain);
+                        }
 
                         prev_tpl_idx = tpl_idx;
 
@@ -1010,7 +1133,7 @@ GenerationResult generate(const GenerationInput& in) {
                         go.sf = iv.sf;
                         go.ef = iv.ef;
                         go.alias_chain = alias.str();
-                        if (!iv.file_path.empty()) {
+                        if (!iv.hold_last_frame && !iv.file_path.empty()) {
                             go.name_kind = ObjNameKind::FilePath;
                             go.name_text = iv.file_path;
                             size_t sep = go.name_text.find_last_of('\\');
@@ -1020,10 +1143,11 @@ GenerationResult generate(const GenerationInput& in) {
                             go.name_index = item_count_global;
                         } else {
                             go.name_kind = ObjNameKind::Item;
-                            go.name_index = item_count_global;
+                            go.name_index = logical_item_count;
+                            go.name_sub_index = iv.hold_last_frame ? 2 : 0;
                         }
                         specs.push_back(go);
-                        item_count_global++;
+                        if (!iv.hold_last_prefix) item_count_global++;
                     }
                 }
 

@@ -768,10 +768,12 @@ void render_config_panel() {
         tr(u8"拉伸到下一音符"),
         tr(u8"拉伸到固定值"),
         tr(u8"仅在间隙生成"),
-        tr(u8"仅在间隙并拉伸固定值")
+        tr(u8"仅在间隙并拉伸固定值"),
+        tr(u8"拉伸并固定最后一帧")
     };
-    ImGui::Combo(tr(u8"同步模式"), &cfg.sync_mode, sync_labels, 5);
-    if (cfg.sync_mode == 2 || cfg.sync_mode == 4) {
+    ImGui::Combo(tr(u8"同步模式"), &cfg.sync_mode, sync_labels, 6);
+    if (cfg.sync_mode == SYNC_MODE_FIXED || cfg.sync_mode == SYNC_MODE_GAP_FIXED ||
+        cfg.sync_mode == SYNC_MODE_STRETCH_HOLD_LAST) {
         ImGui::Indent(16);
         ImGui::InputInt(tr(u8"固定帧数"), &cfg.fixed_duration_frames, 1, 10);
         if (cfg.fixed_duration_frames < 1) cfg.fixed_duration_frames = 1;

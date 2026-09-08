@@ -8,6 +8,13 @@ enum FlipType {
     FLIP_CCW = 4,
 };
 
+constexpr int SYNC_MODE_NOTE = 0;
+constexpr int SYNC_MODE_NEXT = 1;
+constexpr int SYNC_MODE_FIXED = 2;
+constexpr int SYNC_MODE_GAP = 3;
+constexpr int SYNC_MODE_GAP_FIXED = 4;
+constexpr int SYNC_MODE_STRETCH_HOLD_LAST = 5;
+
 struct OutputConfig {
     int fps_num = 60;
     int fps_den = 1;
