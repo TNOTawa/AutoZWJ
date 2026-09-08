@@ -1,4 +1,4 @@
-﻿#include "imgui_window.h"
+#include "imgui_window.h"
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
@@ -6,6 +6,7 @@
 #include "ui/ui_config.h"
 #include "ui/effect_chain_editor.h"
 #include "plugin.h"
+#include "resources/autozwj_resource.h"
 #include <d3d11.h>
 #include <cstdio>
 
@@ -29,6 +30,9 @@ static bool (*g_on_generate)() = nullptr;
 static WNDCLASSEXW g_wc = {};
 ImFont* g_font_normal = nullptr;
 ImFont* g_font_bold = nullptr;
+
+static constexpr wchar_t k_window_class_name[] = L"AutoZWJ_Window";
+static constexpr wchar_t k_window_title[] = L"AutoZWJ";
 
 #define TIMER_RENDER 1
 
@@ -187,26 +191,34 @@ LRESULT CALLBACK imgui_wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         KillTimer(hwnd, TIMER_RENDER);
         return 0;
     }
-    return DefWindowProc(hwnd, msg, wp, lp);
+    return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
 bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
     if (g_initialized) return true;
 
     g_wc.cbSize = sizeof(WNDCLASSEXW);
-    g_wc.lpszClassName = L"AutoZWJ_Window";
+    g_wc.lpszClassName = k_window_class_name;
     g_wc.lpfnWndProc = imgui_wnd_proc;
     g_wc.hInstance = hinst;
     g_wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     g_wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    g_wc.hIcon = (HICON)LoadImageW(hinst, MAKEINTRESOURCEW(IDI_AUTOZWJ), IMAGE_ICON,
+        GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+    g_wc.hIconSm = (HICON)LoadImageW(hinst, MAKEINTRESOURCEW(IDI_AUTOZWJ), IMAGE_ICON,
+        GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
     if (!RegisterClassExW(&g_wc)) return false;
 
     g_imgui_hwnd = CreateWindowExW(
-        0, L"AutoZWJ_Window", L"AutoZWJ",
+        0, k_window_class_name, k_window_title,
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 1127, 650,
         host_window, nullptr, hinst, nullptr);
     if (!g_imgui_hwnd) return false;
+
+    SetWindowTextW(g_imgui_hwnd, k_window_title);
+    SendMessageW(g_imgui_hwnd, WM_SETICON, ICON_BIG, (LPARAM)g_wc.hIcon);
+    SendMessageW(g_imgui_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)g_wc.hIconSm);
 
     ShowWindow(g_imgui_hwnd, SW_SHOW);
     UpdateWindow(g_imgui_hwnd);
@@ -303,7 +315,7 @@ void imgui_window_show() {
     SetForegroundWindow(g_imgui_hwnd);
     g_visible = true;
     InvalidateRect(g_imgui_hwnd, nullptr, FALSE);
-    SetWindowTextW(g_imgui_hwnd, L"AutoZWJ");
+    SetWindowTextW(g_imgui_hwnd, k_window_title);
     render_frame();
 }
 
@@ -315,7 +327,7 @@ void imgui_window_show_import_page() {
     SetForegroundWindow(g_imgui_hwnd);
     g_visible = true;
     InvalidateRect(g_imgui_hwnd, nullptr, FALSE);
-    SetWindowTextW(g_imgui_hwnd, L"AutoZWJ");
+    SetWindowTextW(g_imgui_hwnd, k_window_title);
     render_frame();
 }
 
@@ -349,7 +361,7 @@ void imgui_window_shutdown() {
     ImGui::DestroyContext();
     cleanup_device();
     if (g_imgui_hwnd) { DestroyWindow(g_imgui_hwnd); g_imgui_hwnd = nullptr; }
-    UnregisterClassW(L"AutoZWJ_Window", g_wc.hInstance);
+    UnregisterClassW(k_window_class_name, g_wc.hInstance);
     g_initialized = false;
 }
 

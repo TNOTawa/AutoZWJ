@@ -76,6 +76,7 @@ add_library(AutoZWJ SHARED
     src/application/import_service.cpp
     src/application/project_controller.cpp
     src/adapters/project_file_store.cpp
+    src/autozwj.rc
     ${CMAKE_BINARY_DIR}/version.rc
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp

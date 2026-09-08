@@ -2,7 +2,7 @@
 references/
 /tools/
 
-# 备份目录（子模块迁移/升级时的临时备份）
+# backup
 *.bak/
 
 # Internal state

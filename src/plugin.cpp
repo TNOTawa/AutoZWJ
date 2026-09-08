@@ -1,4 +1,4 @@
-﻿#include "plugin.h"
+#include "plugin.h"
 #include "i18n/i18n.h"
 #include "config2.h"
 #include "core/app_message.h"
@@ -359,11 +359,19 @@ void sync_scene_info() {
 }
 
 EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
-    g_host.dll_hinst = GetModuleHandle(nullptr);
+    HMODULE dll_hinst = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<LPCWSTR>(&RegisterPlugin),
+        &dll_hinst);
+    g_host.dll_hinst = dll_hinst;
 
     static std::wstring s_menu_config = utf8_to_wide(tr_str(u8"配置导入..."));
+    // AviUtl2 expects a Windows file-dialog filter: description, NUL, patterns, NUL, NUL.
+    static constexpr wchar_t k_file_drop_filter[] =
+        L"RPP/MIDI/UTAU Files\0*.rpp;*.mid;*.midi;*.ust;*.ustx\0";
     host->register_object_menu(s_menu_config.c_str(), on_open_config);
-    host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI/UTAU Input", L"*.rpp;*.mid;*.midi;*.ust;*.ustx", on_file_drop);
+    host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI/UTAU Input", k_file_drop_filter, on_file_drop);
     up_register_menu(host);
 
     g_host.edit_handle = host->create_edit_handle();
