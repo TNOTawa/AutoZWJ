@@ -840,7 +840,7 @@ void render_config_panel() {
             ImGui::Unindent(24);
         }
 
-        ImGui::RadioButton(tr(u8"动画序列"), &strategy_idx, 3);
+        ImGui::RadioButton(tr(u8"动画序列 [beta]"), &strategy_idx, 3);
         if (strategy_idx == 3) {
             ImGui::Indent(24);
             ImGui::TextDisabled("%s", tr(u8"将模板物件视为同一音的动画序列"));

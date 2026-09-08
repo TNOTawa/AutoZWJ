@@ -30,19 +30,20 @@
   <a href="docs/ja/README.md">日本語</a>
 </p>
 
-Import media items from REAPER project files (`.rpp`), standard MIDI files (`.mid`), or LRC lyrics files (`.lrc`) into the AviUtl2 timeline as objects, using existing objects as style templates.
+Import media items from REAPER project files (`.rpp`), standard MIDI files (`.mid`), UTAU/OpenUTAU files (`.ust` / `.ustx`), or LRC lyrics files (`.lrc`) into the AviUtl2 timeline as objects, using existing objects as style templates.
 
 ## Features
 
-- Parse REAPER `.rpp` / standard MIDI `.mid` / LRC `.lrc` files
+- Parse REAPER `.rpp` / standard MIDI `.mid` / UTAU `.ust` / OpenUTAU `.ustx` / LRC `.lrc` files
 - Use existing timeline objects as style templates, inheriting their effect chains and parameters
-- Multi-source mapping: assign multiple templates using configurable strategies (sequential rotation / random selection / chord mapping / animation sequence)
+- Multi-source mapping: assign multiple templates using configurable strategies (sequential rotation / random selection / chord mapping / animation sequence [beta])
 - Effect chain editor: view template effect chains and bake parameters with fixed values / variable mappings / evaluated expressions
 - Script variable system: drive bake values with expressions such as `$note.velocity$ / 127 * 200`
 - BPM grid sync: apply MIDI/RPP tempo maps to AviUtl2's BPM grid
 - Internationalization: UI available in Simplified Chinese, English, and Japanese, with automatic host UI language detection
 - Automatic layer allocation below the template, compactly arranged
 - Alternating flips, object duration control, multi-note strategies, alternating row layout
+- Object and note sync modes, including stretch-and-hold-last-frame with optional next-note stretching
 - All parameters automatically read from the current scene (FPS, resolution) and persisted across sessions
 
 ## Installation
@@ -65,7 +66,7 @@ Place `AutoZWJ.aux2` in AviUtl2's `Plugin` directory, then launch AviUtl2.
    Select **any object** on the timeline, right-click → **Configure import...**. If the timeline is empty, place any object first to serve as a template, or skip to step 2 and drop a project file
 
 2. **Load a project**<br>
-   If no project is loaded yet, the plugin window opens on the import page automatically: drop a `.rpp` / `.mid` file onto the AviUtl2 window, or choose a REAPER recent file / **Browse...** on the import page; then check the tracks to generate and click **Confirm import**
+   If no project is loaded yet, the plugin window opens on the import page automatically: drop a `.rpp` / `.mid` / `.ust` / `.ustx` file onto the AviUtl2 window, or choose a recent project / **Browse...** on the import page; then check the tracks to generate and click **Confirm import**
 
 3. **Configure and generate**<br>
    Adjust parameters on the config page → click **OK** or **Apply**

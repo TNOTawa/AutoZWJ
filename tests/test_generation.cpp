@@ -347,6 +347,7 @@ static void test_stretch_hold_last_frame_options() {
     OutputConfig aligned;
     aligned.sync_mode = SYNC_MODE_STRETCH_HOLD_LAST;
     aligned.fixed_duration_frames = 30;
+    aligned.stretch_hold_last_to_next = false;
     auto aligned_result = generate(GenerationInput{objdict, tracks, aligned, templates, scene, 1, 42});
     check(aligned_result.objects.size() == 2 && aligned_result.objects[0].ef == 6,
           "hold-last options: unchecked short note should remain aligned");

@@ -33,7 +33,7 @@ struct OutputConfig {
 
     int sync_mode = SYNC_MODE_NEXT;
     int fixed_duration_frames = 30;
-    bool stretch_hold_last_to_next = false;
+    bool stretch_hold_last_to_next = true;
     int layer_strategy = 0;
     bool reverse_layer_order = false;
     int track_filter_mode = 0;
