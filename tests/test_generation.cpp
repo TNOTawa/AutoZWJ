@@ -141,9 +141,74 @@ static void test_gap_round_up() {
           "gap mode + ceil: note.start_frame var should match sf (32)");
 }
 
+static void test_stretch_hold_last_frame() {
+    auto objdict = make_objdict();
+    objdict.pos    = { -1.0, 0.0, 3.0 };
+    objdict.length = {  0.0, 2.0, 0.25 };
+    objdict.loop   = {    0,   0,   0 };
+    objdict.soffs  = {  0.0, 0.0, 0.0 };
+    objdict.pitch  = {  0.0, 0.0, 0.0 };
+    objdict.playrate = { 1.0, 1.0, 1.0 };
+    objdict.fileidx = { -1, -1, -1 };
+    objdict.filetype = { "", "wav", "wav" };
+    objdict.filelist = { "dummy.wav", "short.wav", "long.wav" };
+    auto tracks = make_tracks();
+    tracks[0].count = 2;
+    auto templates = make_templates();
+    templates[0].source.chain = "[0.0]\neffect.name=test_effect\n位置=0,100,1,0\nnote_idx=0\n\n";
+    ParamBake index_bake;
+    index_bake.effect_index = 0;
+    index_bake.param_name = "note_idx";
+    index_bake.param_value = "$note.index$";
+    index_bake.value_mode = 1;
+    index_bake.active = true;
+    templates[0].bakes.push_back(index_bake);
+
+    SceneInfo scene;
+    OutputConfig config;
+    config.sync_mode = SYNC_MODE_STRETCH_HOLD_LAST;
+    config.fixed_duration_frames = 30;
+    config.use_round_up = true;
+    config.alt_flip = true;
+    config.flip_type = FLIP_HORIZONTAL;
+
+    auto result = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
+    check(result.objects.size() == 3, "hold-last mode: short note plus long note continuation expected");
+    check(result.objects[0].sf == 1 && result.objects[0].ef == 30,
+          "hold-last mode: long note prefix should use fixed duration");
+    check(result.objects[1].sf == 31 && result.objects[1].ef == 180,
+          "hold-last mode: continuation should stretch to the next note");
+    check(result.objects[0].alias_chain.find("位置=0,100,1,0") != std::string::npos,
+          "hold-last mode: prefix should keep template motion");
+    check(result.objects[0].name_kind == ObjNameKind::Item &&
+          result.objects[0].name_index == 0 && result.objects[0].name_sub_index == 0,
+          "hold-last mode: prefix should use the logical item number");
+    check(result.objects[1].name_kind == ObjNameKind::Item &&
+          result.objects[1].name_index == 0 && result.objects[1].name_sub_index == 2,
+          "hold-last mode: continuation should use Item x.2 numbering");
+    check(result.objects[2].name_kind == ObjNameKind::Item &&
+          result.objects[2].name_index == 1 && result.objects[2].name_sub_index == 0,
+          "hold-last mode: following note should keep its logical item number");
+    check(result.objects[0].alias_chain.find("note_idx=1") != std::string::npos &&
+          result.objects[1].alias_chain.find("note_idx=1") != std::string::npos &&
+          result.objects[2].alias_chain.find("note_idx=2") != std::string::npos,
+          "hold-last mode: scripts should see the continuation as the same note");
+    check(result.objects[0].alias_chain.find("左右反転=0") != std::string::npos &&
+          result.objects[1].alias_chain.find("左右反転=0") != std::string::npos &&
+          result.objects[2].alias_chain.find("左右反転=1") != std::string::npos,
+          "hold-last mode: alternating flip should count continuation with its prefix");
+    check(result.objects[1].alias_chain.find("位置=100") != std::string::npos,
+          "hold-last mode: continuation should hold the motion end value");
+    check(result.objects[1].alias_chain.find("位置=0,100,1,0") == std::string::npos,
+          "hold-last mode: continuation should remove motion rules");
+    check(result.objects[2].sf == 181 && result.objects[2].ef == 195,
+          "hold-last mode: short following note should stay aligned to its note");
+}
+
 int main() {
     test_round_up();
     test_gap_round_up();
+    test_stretch_hold_last_frame();
 
     auto objdict = make_objdict();
     auto tracks = make_tracks();
