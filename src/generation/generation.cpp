@@ -844,24 +844,45 @@ GenerationResult generate(const GenerationInput& in) {
                     if (config.sync_mode == SYNC_MODE_STRETCH_HOLD_LAST) {
                         std::vector<ItemInterval> expanded;
                         expanded.reserve(intervals.size() * 2);
+                        const int fixed_frames = std::max(1, config.fixed_duration_frames);
                         for (size_t n = 0; n < intervals.size(); n++) {
                             const auto& source = intervals[n];
+                            int next_sf = -1;
+                            for (size_t next = n + 1; next < intervals.size(); next++) {
+                                if (intervals[next].sf > source.sf) {
+                                    next_sf = intervals[next].sf;
+                                    break;
+                                }
+                            }
+
+                            int available_ef = source.ef;
+                            if (next_sf > 0) available_ef = std::min(available_ef, next_sf - 1);
+                            int target_ef = available_ef;
+                            if (config.stretch_hold_last_to_next && next_sf > 0) {
+                                target_ef = next_sf - 1;
+                            }
+
                             int note_frames = source.ef - source.sf + 1;
-                            if (note_frames <= config.fixed_duration_frames) {
-                                expanded.push_back(source);
+                            if (note_frames <= fixed_frames) {
+                                ItemInterval short_note = source;
+                                if (config.stretch_hold_last_to_next && target_ef > short_note.sf) {
+                                    short_note.ef = target_ef;
+                                    short_note.bf = static_cast<double>(target_ef);
+                                }
+                                expanded.push_back(short_note);
                                 continue;
                             }
 
                             ItemInterval prefix = source;
-                            prefix.ef = prefix.sf + config.fixed_duration_frames - 1;
+                            prefix.ef = std::min({source.ef,
+                                                 prefix.sf + fixed_frames - 1,
+                                                 available_ef});
+                            if (prefix.ef < prefix.sf) prefix.ef = prefix.sf;
                             prefix.bf = static_cast<double>(prefix.ef);
 
                             ItemInterval tail = source;
                             tail.sf = prefix.ef + 1;
-                            int tail_ef = source.ef;
-                            if (n + 1 < intervals.size() && intervals[n + 1].sf > tail.sf) {
-                                tail_ef = intervals[n + 1].sf - 1;
-                            }
+                            int tail_ef = target_ef;
                             expanded.push_back(prefix);
                             if (tail_ef >= tail.sf) {
                                 prefix.hold_last_prefix = true;

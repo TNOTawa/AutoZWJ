@@ -262,6 +262,7 @@ static void test_stretch_hold_last_frame() {
     config.use_round_up = true;
     config.alt_flip = true;
     config.flip_type = FLIP_HORIZONTAL;
+    config.stretch_hold_last_to_next = true;
 
     auto result = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
     check(result.objects.size() == 3, "hold-last mode: short note plus long note continuation expected");
@@ -328,6 +329,46 @@ static void test_stretch_hold_last_frame_chord_boundary() {
           "hold-last chord boundary: same-frame chord note should remain present");
 }
 
+static void test_stretch_hold_last_frame_options() {
+    auto objdict = make_objdict();
+    objdict.pos = { -1.0, 0.0, 1.0 };
+    objdict.length = { 0.0, 0.1, 0.1 };
+    objdict.loop = { 0, 0, 0 };
+    objdict.soffs = { 0.0, 0.0, 0.0 };
+    objdict.pitch = { 0.0, 0.0, 0.0 };
+    objdict.playrate = { 1.0, 1.0, 1.0 };
+    objdict.fileidx = { -1, -1, -1 };
+    objdict.filetype = { "", "wav", "wav" };
+    auto tracks = make_tracks();
+    tracks[0].count = 2;
+    auto templates = make_templates();
+    SceneInfo scene;
+
+    OutputConfig aligned;
+    aligned.sync_mode = SYNC_MODE_STRETCH_HOLD_LAST;
+    aligned.fixed_duration_frames = 30;
+    auto aligned_result = generate(GenerationInput{objdict, tracks, aligned, templates, scene, 1, 42});
+    check(aligned_result.objects.size() == 2 && aligned_result.objects[0].ef == 6,
+          "hold-last options: unchecked short note should remain aligned");
+
+    OutputConfig stretched = aligned;
+    stretched.stretch_hold_last_to_next = true;
+    auto stretched_result = generate(GenerationInput{objdict, tracks, stretched, templates, scene, 1, 42});
+    check(stretched_result.objects.size() == 2 && stretched_result.objects[0].ef == 60,
+          "hold-last options: checked short note should stretch to the next note");
+
+    ObjDict compressed = objdict;
+    compressed.pos = { -1.0, 0.0, 0.2 };
+    compressed.length = { 0.0, 2.0, 0.1 };
+    auto compressed_result = generate(GenerationInput{compressed, tracks, aligned, templates, scene, 1, 42});
+    check(compressed_result.objects.size() == 2,
+          "hold-last options: compressed prefix should not lose the following note");
+    check(compressed_result.objects[0].sf == 1 && compressed_result.objects[0].ef == 12,
+          "hold-last options: prefix should compress to the next note boundary");
+    check(compressed_result.objects[1].sf == 13,
+          "hold-last options: following note should start immediately after compressed prefix");
+}
+
 int main() {
     test_round_up();
     test_motion_value_compatibility();
@@ -336,6 +377,7 @@ int main() {
     test_animation_sequence();
     test_stretch_hold_last_frame();
     test_stretch_hold_last_frame_chord_boundary();
+    test_stretch_hold_last_frame_options();
 
     auto objdict = make_objdict();
     auto tracks = make_tracks();

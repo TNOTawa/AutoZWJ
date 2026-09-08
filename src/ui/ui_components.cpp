@@ -777,6 +777,9 @@ void render_config_panel() {
         ImGui::Indent(16);
         ImGui::InputInt(tr(u8"固定帧数"), &cfg.fixed_duration_frames, 1, 10);
         if (cfg.fixed_duration_frames < 1) cfg.fixed_duration_frames = 1;
+        if (cfg.sync_mode == SYNC_MODE_STRETCH_HOLD_LAST) {
+            ImGui::Checkbox(tr(u8"拉伸至下一音符"), &cfg.stretch_hold_last_to_next);
+        }
         ImGui::Unindent(16);
     }
 

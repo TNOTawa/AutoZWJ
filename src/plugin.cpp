@@ -111,7 +111,7 @@ EXTERN_C __declspec(dllexport) void InitializeConfig(CONFIG_HANDLE* config) {
         menu_registry_load(config->app_data_path);
     }
     feature_registry_upsert(kFeatureParseRppXmidiNotes,
-        kFeatureParseRppXmidiNotesLabel, false);
+        kFeatureParseRppXmidiNotesLabel, true);
 }
 
 EXTERN_C __declspec(dllexport) bool InitializePlugin(DWORD version) {
