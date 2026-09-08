@@ -42,6 +42,7 @@ struct OutputConfig {
     int mapping_strategy = MAPPING_STRATEGY_SEQUENTIAL;
     int mapping_sequential_order = 0;
     bool mapping_no_consecutive = false;
+    bool animation_sequence_allow_stretch = true;
 
     double base_time_sec = 0.0;
 };

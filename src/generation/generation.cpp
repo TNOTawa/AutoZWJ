@@ -619,7 +619,12 @@ static void emit_animation_sequence(
         const auto& tpl = templates[tpl_idx];
 
         ItemInterval child = group;
-        if (source_ef <= source_sf) {
+        if (!config.animation_sequence_allow_stretch) {
+            child.sf = group.sf + static_cast<int>(frame_round(
+                tpl.source.sf - source_sf, config.use_round_up));
+            child.ef = group.sf + static_cast<int>(frame_round(
+                tpl.source.ef - source_sf, config.use_round_up));
+        } else if (source_ef <= source_sf) {
             child.sf = group.sf;
             child.ef = group.ef;
         } else {
@@ -627,8 +632,16 @@ static void emit_animation_sequence(
             child.ef = map_sequence_frame(group.sf, group.ef, tpl.source.ef, source_sf, source_ef, config.use_round_up);
         }
         if (sequence_index == 0) child.sf = group.sf;
-        if (sequence_index + 1 == order.size()) child.ef = group.ef;
-        if (child.ef <= child.sf) child.ef = child.sf + 1;
+        if (config.animation_sequence_allow_stretch && sequence_index + 1 == order.size()) {
+            child.ef = group.ef;
+        } else if (!config.animation_sequence_allow_stretch) {
+            if (child.sf > group.ef) continue;
+            child.ef = std::min(child.ef, group.ef);
+        }
+        if (child.ef <= child.sf) {
+            child.ef = std::min(group.ef, child.sf + 1);
+            if (child.ef <= child.sf) continue;
+        }
         child.obj_fp = static_cast<double>(child.sf);
         child.bf = static_cast<double>(child.ef);
 

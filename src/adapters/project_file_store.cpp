@@ -29,6 +29,8 @@ static void save_config_callback(void* param, EDIT_SECTION* edit) {
     pf->set_param_string("rppinexo.mapping_strategy", std::to_string(cfg->mapping_strategy).c_str());
     pf->set_param_string("rppinexo.mapping_sequential_order", std::to_string(cfg->mapping_sequential_order).c_str());
     pf->set_param_string("rppinexo.mapping_no_consecutive", cfg->mapping_no_consecutive ? "1" : "0");
+    pf->set_param_string("rppinexo.animation_sequence_allow_stretch",
+        cfg->animation_sequence_allow_stretch ? "1" : "0");
     pf->set_param_string("rppinexo.last_directory", wide_to_utf8(*ctx->last_dir).c_str());
 }
 
@@ -73,6 +75,8 @@ void load_project_state_from_project_file(EDIT_SECTION* edit, AppState& app, con
     if (val) cfg.mapping_sequential_order = std::atoi(val);
     val = pf->get_param_string("rppinexo.mapping_no_consecutive");
     if (val) cfg.mapping_no_consecutive = (std::atoi(val) != 0);
+    val = pf->get_param_string("rppinexo.animation_sequence_allow_stretch");
+    if (val) cfg.animation_sequence_allow_stretch = (std::atoi(val) != 0);
     val = pf->get_param_string("rppinexo.last_directory");
     if (val) app.project.last_directory = utf8_to_wide(val);
 

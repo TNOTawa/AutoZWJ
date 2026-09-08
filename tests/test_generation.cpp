@@ -206,6 +206,7 @@ static void test_animation_sequence() {
     OutputConfig config;
     config.mapping_strategy = MAPPING_STRATEGY_ANIMATION_SEQUENCE;
     config.sync_mode = SYNC_MODE_NOTE;
+    config.animation_sequence_allow_stretch = true;
     SceneInfo scene;
     auto res = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
 
@@ -230,6 +231,36 @@ static void test_animation_sequence() {
     auto fixed = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
     check(fixed.objects.size() == 2 && fixed.objects[0].sf == 1 && fixed.objects[1].ef == 30,
           "animation sequence: fixed sync should resize the whole sequence range");
+}
+
+static void test_animation_sequence_without_stretch() {
+    auto objdict = make_objdict();
+    objdict.pos = { -1.0, 0.0 };
+    objdict.length = { 0.0, 1.25 };
+    objdict.fileidx = { -1, -1 };
+    auto tracks = make_tracks();
+    auto templates = make_templates();
+    templates[0].source.sf = 1.0;
+    templates[0].source.ef = 60;
+    TemplateSession second = templates[0];
+    second.source.sf = 61.0;
+    second.source.ef = 120;
+    second.source.layer = 2;
+    templates.push_back(second);
+
+    OutputConfig config;
+    config.mapping_strategy = MAPPING_STRATEGY_ANIMATION_SEQUENCE;
+    config.sync_mode = SYNC_MODE_NEXT;
+    config.animation_sequence_allow_stretch = false;
+    SceneInfo scene;
+    auto result = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
+
+    check(result.objects.size() == 2,
+          "animation sequence without stretch: both sequence objects should remain");
+    check(result.objects[0].sf == 1 && result.objects[0].ef == 60,
+          "animation sequence without stretch: first object keeps its absolute duration");
+    check(result.objects[1].sf == 61 && result.objects[1].ef == 75,
+          "animation sequence without stretch: second object is clipped to the remaining range");
 }
 
 static void test_stretch_hold_last_frame() {
@@ -376,6 +407,7 @@ int main() {
     test_gap_round_up();
     test_stretch_next_chord();
     test_animation_sequence();
+    test_animation_sequence_without_stretch();
     test_stretch_hold_last_frame();
     test_stretch_hold_last_frame_chord_boundary();
     test_stretch_hold_last_frame_options();

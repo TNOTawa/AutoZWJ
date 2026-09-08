@@ -843,6 +843,8 @@ void render_config_panel() {
         ImGui::RadioButton(tr(u8"动画序列 [beta]"), &strategy_idx, 3);
         if (strategy_idx == 3) {
             ImGui::Indent(24);
+            ImGui::Checkbox(tr(u8"允许拉伸"), &cfg.animation_sequence_allow_stretch);
+            ImGui::TextDisabled("%s", tr(u8"动画序列允许拉伸说明"));
             ImGui::TextDisabled("%s", tr(u8"将模板物件视为同一音的动画序列"));
             ImGui::Unindent(24);
         }
