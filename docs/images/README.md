@@ -1,14 +1,10 @@
-# AutoZWJ logo assets
+# AutoZWJ image assets
 
-The following files are excluded from the repository's MIT License:
+All files in this directory are excluded from the repository's MIT License
+and are licensed under the Creative Commons Attribution-NonCommercial-
+NoDerivatives 4.0 International License.
 
-- `logo.svg`
-- `autozwj-logo-vector.af` (editable source file)
-
-These logo assets are Copyright (c) 2026 TNOTawa and are licensed under the
-Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International
-License. See the full license text in
-[`../../LICENSE-CC-BY-NC-ND-4.0`](../../LICENSE-CC-BY-NC-ND-4.0).
+Copyright (c) 2026 TNOTawa. See the full license text in [`LICENSE`](LICENSE).
 
 The license permits sharing the unmodified assets with attribution. It does
 not permit commercial use or distribution of adapted material without

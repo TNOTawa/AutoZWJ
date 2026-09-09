@@ -139,11 +139,4 @@ AutoZWJがお役に立ちましたら、以下のプラットフォームから�
 
 ## ライセンス
 
-AutoZWJ のソフトウェアおよびソフトウェア関連ドキュメントは
-[MIT License](../../LICENSE) の下でライセンスされています。
-
-ロゴ画像 [`docs/images/logo.svg`](../images/logo.svg) と編集可能なソースファイル
-[`docs/images/autozwj-logo-vector.af`](../images/autozwj-logo-vector.af) は MIT License の
-対象外であり、[CC BY-NC-ND 4.0](../../LICENSE-CC-BY-NC-ND-4.0) の下で個別に
-ライセンスされています。対象範囲と表示については
-[`docs/images/README.md`](../images/README.md) を参照してください。
+MIT License
