@@ -5,6 +5,7 @@
 #include "ui_components.h"
 #include "ui/ui_config.h"
 #include "ui/effect_chain_editor.h"
+#include "ui/font_support.h"
 #include "plugin.h"
 #include "resources/autozwj_resource.h"
 #include <d3d11.h>
@@ -88,6 +89,13 @@ static std::wstring configured_font_name() {
     return name;
 }
 
+// 简体中文字形缺字时的补字字体（微软雅黑）
+static std::wstring chinese_fallback_path() {
+    std::wstring path = find_installed_font_path(L"Microsoft YaHei");
+    if (!path.empty()) return path;
+    return L"C:\\Windows\\Fonts\\msyh.ttc";
+}
+
 static void load_imgui_fonts() {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->ClearFonts();
@@ -100,12 +108,13 @@ static void load_imgui_fonts() {
     const float font_size = preferences().font_size;
     std::wstring configured_name = configured_font_name();
     std::wstring primary_path = find_installed_font_path(configured_name);
-    if (primary_path.empty()) primary_path = L"C:\\Windows\\Fonts\\msyh.ttc";
+    const std::wstring fallback_path = chinese_fallback_path();
+    if (primary_path.empty()) primary_path = fallback_path;
     if (path_exists(primary_path)) {
         const std::string primary_utf8 = wide_to_utf8(primary_path);
         g_font_normal = io.Fonts->AddFontFromFileTTF(primary_utf8.c_str(), font_size, nullptr, ranges);
-        const std::wstring fallback_path = L"C:\\Windows\\Fonts\\msyh.ttc";
-        bool needs_fallback = !configured_name.empty() && !host_font_supports_cjk(configured_name);
+        // 主字体缺少简体字形时界面会显示为问号，合并微软雅黑补字
+        const bool needs_fallback = !font_covers_text(configured_name, kChineseUiProbeText);
         if (g_font_normal && needs_fallback && lower_wide(primary_path) != lower_wide(fallback_path) && path_exists(fallback_path)) {
             ImFontConfig fallback_cfg;
             fallback_cfg.MergeMode = true;

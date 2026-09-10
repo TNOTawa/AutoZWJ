@@ -8,6 +8,7 @@
 #include "ui/file_picker.h"
 #include "ui/imgui_window.h"
 #include "ui/effect_chain_editor.h"
+#include "ui/font_support.h"
 #include "script/expr_evaluator.h"
 #include "script/variable_subst.h"
 #include "chain/template_chain.h"
@@ -81,13 +82,63 @@ static void scan_plugin_language_sections() {
     FindClose(hFind);
 }
 
+static bool text_is_ascii(LPCWSTR text) {
+    for (const wchar_t* p = text; *p; p++) {
+        if (*p > 0x7F) return false;
+    }
+    return true;
+}
+
+// 宿主界面语言：以语言文件中确定存在的词条为探针。
+// 返回值与键相同表示未翻译（宿主使用日文默认语言），译文含简体专用字形表示简体中文，
+// 纯 ASCII 译文表示英文，其余（繁体/韩文等）沿用既有行为按日文处理。
 static Lang detect_aviutl2_lang() {
     if (!g_config_handle) return Lang::ZhCN;
-    LPCWSTR r = g_config_handle->get_language_text(g_config_handle, L"Effect", L"動画ファイル");
-    if (!r) return Lang::ZhCN;
-    if (wcscmp(r, L"视频文件") == 0) return Lang::ZhCN;
-    if (wcscmp(r, L"VideoFile") == 0) return Lang::En;
-    return Lang::Ja;
+    static constexpr struct { LPCWSTR section; LPCWSTR key; } kProbes[] = {
+        { L"Effect", L"動画ファイル" },
+        { L"Effect", L"音声ファイル" },
+        { L"Effect", L"テキスト" },
+    };
+    bool english = false;
+    for (const auto& probe : kProbes) {
+        LPCWSTR text = g_config_handle->get_language_text(g_config_handle, probe.section, probe.key);
+        if (!text || !text[0]) return Lang::ZhCN;
+        if (wcscmp(text, probe.key) == 0) continue;
+        if (text_has_simplified_only_glyphs(text)) return Lang::ZhCN;
+        if (text_is_ascii(text)) {
+            english = true;
+            continue;
+        }
+        return Lang::Ja;
+    }
+    return english ? Lang::En : Lang::Ja;
+}
+
+// 首次启动时的界面字体校正：AviUtl2 默认字体（Yu Gothic UI）缺少简体字形，
+// 中文界面会显示为问号，且多数字体的中文字形默认优先日文写法，
+// 因此简体中文宿主下自动分配简体中文字体（微软雅黑等）。
+static void apply_first_run_chinese_ui_font() {
+    if (preferences().font_auto_setup_done) return;
+    preferences().font_auto_setup_done = true;
+
+    if (detect_aviutl2_lang() == Lang::ZhCN) {
+        std::wstring current = preferences().font_name;
+        if (current.empty()) host_get_default_font(current);  // 跟随主题时按主题字体判断
+        if (!font_natively_supports_chinese_ui(current)) {
+            const std::wstring assigned = pick_simplified_chinese_ui_font();
+            if (!assigned.empty()) {
+                preferences().font_name = assigned;
+                const std::wstring from = current.empty() ? std::wstring(L"(theme)") : current;
+                if (g_host.logger)
+                    g_host.logger->log(g_host.logger,
+                        (L"AutoZWJ: UI font auto-assigned: " + from + L" -> " + assigned).c_str());
+            } else if (g_host.logger) {
+                g_host.logger->warn(g_host.logger,
+                    L"AutoZWJ: no Simplified Chinese UI font found, keep current UI font");
+            }
+        }
+    }
+    preferences_save();
 }
 
 std::string host_translate_effect_name(const std::string& ja_name) {
@@ -111,6 +162,7 @@ EXTERN_C __declspec(dllexport) void InitializeConfig(CONFIG_HANDLE* config) {
     if (config && config->app_data_path) {
         menu_registry_load(config->app_data_path);
         preferences_load(config->app_data_path);
+        apply_first_run_chinese_ui_font();
     }
 }
 
@@ -364,46 +416,6 @@ bool host_get_default_font(std::wstring& name) {
     if (!info || !info->name || !info->name[0]) return false;
     name = info->name;
     return true;
-}
-
-bool host_font_supports_cjk(const std::wstring& name) {
-    if (name.empty()) return false;
-    HDC dc = GetDC(nullptr);
-    if (!dc) return false;
-    HFONT font = CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-        DEFAULT_PITCH, name.c_str());
-    if (!font) {
-        ReleaseDC(nullptr, dc);
-        return false;
-    }
-    HGDIOBJ old = SelectObject(dc, font);
-    DWORD bytes = GetFontUnicodeRanges(dc, nullptr);
-    std::vector<BYTE> data(bytes);
-    bool supported = false;
-    if (bytes > 0) {
-        auto* ranges = reinterpret_cast<GLYPHSET*>(data.data());
-        ranges->cbThis = bytes;
-        if (GetFontUnicodeRanges(dc, ranges)) {
-            const wchar_t required[] = { L'中', L'文', L'日', L'本', L'あ', L'ア' };
-            supported = true;
-            for (wchar_t codepoint : required) {
-                bool found = false;
-                for (DWORD i = 0; i < ranges->cRanges && !found; i++) {
-                    const WCRANGE& range = ranges->ranges[i];
-                    found = codepoint >= range.wcLow && codepoint < range.wcLow + range.cGlyphs;
-                }
-                if (!found) {
-                    supported = false;
-                    break;
-                }
-            }
-        }
-    }
-    SelectObject(dc, old);
-    DeleteObject(font);
-    ReleaseDC(nullptr, dc);
-    return supported;
 }
 
 static void on_open_preferences(HWND, HINSTANCE) {

@@ -53,6 +53,7 @@ add_library(autozwj_ui STATIC
     src/ui/imgui_window.cpp
     src/ui/ui_components.cpp
     src/ui/effect_chain_editor.cpp
+    src/ui/font_support.cpp
 )
 target_include_directories(autozwj_ui PRIVATE
     ${CMAKE_SOURCE_DIR}/src
@@ -181,4 +182,28 @@ if(AUTOZWJ_BUILD_TESTS)
     )
     target_link_libraries(autozwj_test_generation PRIVATE autozwj_core)
     add_test(NAME autozwj_test_generation COMMAND autozwj_test_generation)
+
+    # ---- autozwj_test_font: 简体中文界面字体判定测试（GDI 字形探测） ----
+    add_executable(autozwj_test_font
+        tests/test_font_support.cpp
+        src/ui/font_support.cpp
+    )
+    target_include_directories(autozwj_test_font PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    target_link_libraries(autozwj_test_font PRIVATE gdi32 user32)
+    add_test(NAME autozwj_test_font COMMAND autozwj_test_font)
+
+    # ---- autozwj_test_first_run_font: 首次启动字体自动分配端到端测试 ----
+    # 加载构建出的 AutoZWJ.aux2，以伪 CONFIG_HANDLE 驱动 InitializeConfig
+    add_executable(autozwj_test_first_run_font
+        tests/test_first_run_font.cpp
+    )
+    target_include_directories(autozwj_test_first_run_font PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/aviutl2_sdk/include/aviutl2_sdk
+    )
+    add_dependencies(autozwj_test_first_run_font AutoZWJ)
+    add_test(NAME autozwj_test_first_run_font
+        COMMAND autozwj_test_first_run_font $<TARGET_FILE:AutoZWJ>)
 endif()

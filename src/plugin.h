@@ -25,4 +25,3 @@ void sync_scene_info();
 
 std::string host_translate_effect_name(const std::string& ja_name);
 bool host_get_default_font(std::wstring& name);
-bool host_font_supports_cjk(const std::wstring& name);

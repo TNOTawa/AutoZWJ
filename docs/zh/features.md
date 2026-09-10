@@ -233,3 +233,17 @@ std::string tr_fmt(zh_key, args...);       // 格式化翻译字符串（C++20 s
 ```
 
 所有 UI 字符串通过 `tr()` 包裹，以中文为 key 查询对应语言的翻译。效果名称通过 AviUtl2 SDK 的 `get_language_text()` 在运行时动态翻译。
+
+---
+
+## 界面字体与简体中文支持
+
+AviUtl2 默认主题字体为 `Yu Gothic UI`：该字体缺少简体字形（中文界面显示为问号），
+且多数字体的中文字形默认优先日文写法。插件按以下规则保证中文界面可读：
+
+1. **首次启动检测**：通过 `get_language_text()` 词条探针判定宿主界面语言，仅在简体中文宿主下执行字体校正，并把 `font_auto_setup_done` 写入 `AutoZWJ.preferences.ini`，之后不再自动改写用户选择
+2. **字体判定**（`src/ui/font_support.cpp`）：家族真实存在（字体枚举确认，避免 GDI 静默替换成系统默认字体）+ 覆盖简体中文界面探针文本 + 字体签名声明 GB2312 代码页（排除只声明日文代码页的 `Yu Gothic UI` / `Meiryo` / `MS Gothic` 等）
+3. **自动分配**：判定失败时依次尝试 `Microsoft YaHei` → `Microsoft YaHei UI` → `Noto Sans SC` → `DengXian` → `SimSun`，写入首个可用字体；全部不可用时保持原字体并在宿主控制台记录 `AutoZWJ:` 日志
+4. **补字兜底**：主字体缺少简体字形时，ImGui 字体图集合并微软雅黑补字，避免出现问号
+
+首选项「字体设置」可随时改回「跟随AviUtl2主题」或指定其他字体；「恢复默认」会一并重置首次启动标记。

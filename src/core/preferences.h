@@ -11,6 +11,8 @@ struct Preferences {
     int window_height = kDefaultWindowHeight;
     std::wstring font_name;
     float font_size = kDefaultFontSize;
+    // 首次启动的界面字体自动分配是否已评估（中文宿主下自动分配简体中文字体）
+    bool font_auto_setup_done = false;
     bool effect_editor_default = false;
 };
 

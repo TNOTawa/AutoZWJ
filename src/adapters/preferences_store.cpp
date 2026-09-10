@@ -43,6 +43,7 @@ void preferences_load(const std::wstring& app_data_dir) {
     wchar_t size[64] = {};
     GetPrivateProfileStringW(L"preferences", L"font_size", L"", size, 64, g_ini_path.c_str());
     if (size[0]) g_preferences.font_size = std::clamp(static_cast<float>(_wtof(size)), 10.0f, 48.0f);
+    g_preferences.font_auto_setup_done = read_int(L"font_auto_setup_done", 0) != 0;
 }
 
 void preferences_save() {
@@ -55,6 +56,7 @@ void preferences_save() {
     put(L"window_height", std::to_wstring(g_preferences.window_height));
     put(L"font_name", g_preferences.font_name);
     put(L"font_size", std::to_wstring(g_preferences.font_size));
+    put(L"font_auto_setup_done", g_preferences.font_auto_setup_done ? L"1" : L"0");
     put(L"effect_editor_default", g_preferences.effect_editor_default ? L"1" : L"0");
 }
 
