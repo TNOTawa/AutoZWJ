@@ -401,6 +401,57 @@ static void test_stretch_hold_last_frame_options() {
           "hold-last options: following note should start immediately after compressed prefix");
 }
 
+// 用例：多音符策略“仅取第N轨”下，交替翻转（计数模式=全部）只统计实际生成的物件
+// 三个两音和弦：每个和弦的第 1 个音符落到层 0（被过滤），第 2 个落到层 1（保留）。
+// 修正前翻转奇偶沿用完整音符流的 1/3/5（恒为反転），修正后应按实际生成的
+// 逻辑音符重新推进为 0/1/0；$note.index$ 仍按完整音符流编号（2/4/6），
+// 保证被过滤的音符不会导致编号回退。
+static void test_flip_counter_track_filter() {
+    auto objdict = make_objdict();
+    objdict.pos    = { -1.0, 0.0, 0.0, 1.0, 1.0, 2.0, 2.0 };
+    objdict.length = {  0.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 };
+    objdict.loop   = {    0,   0,   0,   0,   0,   0,   0 };
+    objdict.soffs  = {  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+    objdict.pitch  = {  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+    objdict.playrate = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+    objdict.fileidx  = { -1, -1, -1, -1, -1, -1, -1 };
+    objdict.filetype = { "", "", "", "", "", "", "" };
+    objdict.filelist = {};
+
+    auto tracks = make_tracks();
+    tracks[0].count = 6;
+    auto templates = make_templates();
+    templates[0].source.chain = "[0.0]\neffect.name=test_effect\nnote_idx=0\n\n";
+    ParamBake index_bake;
+    index_bake.effect_index = 0;
+    index_bake.param_name = "note_idx";
+    index_bake.param_value = "$note.index$";
+    index_bake.value_mode = 1;
+    index_bake.active = true;
+    templates[0].bakes.push_back(index_bake);
+
+    SceneInfo scene;
+    OutputConfig config;
+    config.sync_mode = SYNC_MODE_NOTE;
+    config.alt_flip = true;
+    config.flip_type = FLIP_HORIZONTAL;
+    config.flip_counter_mode = 0;
+    config.track_filter_mode = 1;
+    config.track_filter_n = 2;
+
+    auto result = generate(GenerationInput{objdict, tracks, config, templates, scene, 1, 42});
+    check(result.objects.size() == 3,
+          "flip counter with track filter: one object per chord should remain");
+    check(result.objects[0].alias_chain.find("左右反転=0") != std::string::npos &&
+          result.objects[1].alias_chain.find("左右反転=1") != std::string::npos &&
+          result.objects[2].alias_chain.find("左右反転=0") != std::string::npos,
+          "flip counter with track filter: alternating flip should count only generated objects");
+    check(result.objects[0].alias_chain.find("note_idx=2") != std::string::npos &&
+          result.objects[1].alias_chain.find("note_idx=4") != std::string::npos &&
+          result.objects[2].alias_chain.find("note_idx=6") != std::string::npos,
+          "flip counter with track filter: logical note index should still count filtered notes");
+}
+
 int main() {
     test_round_up();
     test_motion_value_compatibility();
@@ -411,6 +462,7 @@ int main() {
     test_stretch_hold_last_frame();
     test_stretch_hold_last_frame_chord_boundary();
     test_stretch_hold_last_frame_options();
+    test_flip_counter_track_filter();
 
     auto objdict = make_objdict();
     auto tracks = make_tracks();

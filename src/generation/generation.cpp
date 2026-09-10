@@ -598,6 +598,7 @@ static void emit_animation_sequence(
     const TrackNode& track,
     const SceneInfo& scene,
     int item_count_global,
+    int flip_count_global,
     int total_items,
     double track_pitch_min,
     double track_pitch_max,
@@ -653,7 +654,7 @@ static void emit_animation_sequence(
         int layer_count = layer_item_counts[use_layer];
         std::vector<PresetEntry> item_presets;
         if (config.alt_flip && config.flip_type != 0) {
-            int flip_count = config.flip_counter_mode == 0 ? item_count_global : layer_count;
+            int flip_count = config.flip_counter_mode == 0 ? flip_count_global : layer_count;
             PresetEntry p;
             p.effect_block = build_flip_block(config.flip_type, flip_count);
             p.position = tpl.presets.empty() ? -1 : tpl.presets[0].position;
@@ -743,6 +744,9 @@ GenerationResult generate(const GenerationInput& in) {
 
     int bfidx_global = 0;
     int item_count_global = 0;
+    // 交替翻转（计数模式=全部）只统计实际生成的逻辑音符：
+    // 被多音符策略过滤掉的音符不占用奇偶，尾段与前段共享同一次计数。
+    int flip_count_global = 0;
     int bpos_global = 0;
     std::map<int, int> layer_item_counts;
 
@@ -1019,9 +1023,13 @@ GenerationResult generate(const GenerationInput& in) {
 
                             emit_animation_sequence(
                                 iv, in.templates, objdict, config, tracks[ti], in.scene,
-                                item_count_global, total_items, track_pitch_min, track_pitch_max,
+                                item_count_global, flip_count_global, total_items,
+                                track_pitch_min, track_pitch_max,
                                 root_layer, is_gap_only, layer_item_counts, specs, warnings);
-                            if (!iv.hold_last_prefix) item_count_global++;
+                            if (!iv.hold_last_prefix) {
+                                item_count_global++;
+                                flip_count_global++;
+                            }
                             continue;
                         }
 
@@ -1051,7 +1059,7 @@ GenerationResult generate(const GenerationInput& in) {
                         int use_layer;
 
                         if (config.flip_counter_mode == 0) {
-                            int flip_count = logical_item_count;
+                            int flip_count = flip_count_global;
                             if (config.alt_flip && config.flip_type != 0) {
                                 PresetEntry p;
                                 p.effect_block = build_flip_block(config.flip_type, flip_count);
@@ -1166,7 +1174,10 @@ GenerationResult generate(const GenerationInput& in) {
                             go.name_sub_index = iv.hold_last_frame ? 1 : 0;
                         }
                         specs.push_back(go);
-                        if (!iv.hold_last_prefix) item_count_global++;
+                        if (!iv.hold_last_prefix) {
+                            item_count_global++;
+                            flip_count_global++;
+                        }
                     }
                 }
 
