@@ -198,11 +198,13 @@ if(AUTOZWJ_BUILD_TESTS)
     # 加载构建出的 AutoZWJ.aux2，以伪 CONFIG_HANDLE 驱动 InitializeConfig
     add_executable(autozwj_test_first_run_font
         tests/test_first_run_font.cpp
+        src/ui/font_support.cpp
     )
     target_include_directories(autozwj_test_first_run_font PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/aviutl2_sdk/include/aviutl2_sdk
     )
+    target_link_libraries(autozwj_test_first_run_font PRIVATE gdi32 user32)
     add_dependencies(autozwj_test_first_run_font AutoZWJ)
     add_test(NAME autozwj_test_first_run_font
         COMMAND autozwj_test_first_run_font $<TARGET_FILE:AutoZWJ>)

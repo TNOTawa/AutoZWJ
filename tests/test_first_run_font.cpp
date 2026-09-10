@@ -8,6 +8,7 @@
 #include <string>
 
 #include "config2.h"
+#include "ui/font_support.h"
 
 using InitializeConfigFn = void (*)(CONFIG_HANDLE*);
 
@@ -104,13 +105,27 @@ int main(int argc, char** argv) {
     }
 
     // 2) 简体中文宿主 + 已选择可用的简体中文字体 → 不覆盖用户选择
+    //    字体安装情况随机器而异（CI 只装了兜底的微软雅黑），因此先探测本机可用的
+    //    非兜底简体中文字体；探测不到时跳过该用例（与 autozwj_test_font 的 SKIP 约定一致）。
     {
-        const auto dir = make_case_dir(L"autozwj_first_run_font_case2");
-        write_ini_value(dir / L"AutoZWJ.preferences.ini", L"font_name", L"Noto Sans SC");
-        const auto ini = run_host(initialize, dir, true, L"Yu Gothic UI");
-        check(read_ini_value(ini, L"font_name") == L"Noto Sans SC",
-              "an already usable Chinese font should be kept");
-        std::printf("PASS: Chinese host + Noto Sans SC -> kept\n");
+        std::wstring already_usable;
+        for (const wchar_t* candidate : { L"Microsoft YaHei UI", L"Noto Sans SC",
+                                          L"DengXian", L"SimSun" }) {
+            if (font_natively_supports_chinese_ui(candidate)) {
+                already_usable = candidate;
+                break;
+            }
+        }
+        if (already_usable.empty()) {
+            std::printf("SKIP: no non-fallback Simplified Chinese font is installed\n");
+        } else {
+            const auto dir = make_case_dir(L"autozwj_first_run_font_case2");
+            write_ini_value(dir / L"AutoZWJ.preferences.ini", L"font_name", already_usable);
+            const auto ini = run_host(initialize, dir, true, L"Yu Gothic UI");
+            check(read_ini_value(ini, L"font_name") == already_usable,
+                  "an already usable Chinese font should be kept");
+            std::printf("PASS: Chinese host + %ls -> kept\n", already_usable.c_str());
+        }
     }
 
     // 3) 非中文宿主 → 不干预字体
