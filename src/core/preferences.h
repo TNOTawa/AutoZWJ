@@ -2,9 +2,16 @@
 #include <string>
 
 struct Preferences {
+    // 窗口尺寸以 96 DPI 逻辑像素存储，实际窗口尺寸 = 逻辑值 × 当前显示器缩放
     static constexpr int kDefaultWindowWidth = 1127;
     static constexpr int kDefaultWindowHeight = 650;
+    static constexpr int kMinWindowWidth = 640;
+    static constexpr int kMaxWindowWidth = 3840;
+    static constexpr int kMinWindowHeight = 420;
+    static constexpr int kMaxWindowHeight = 2160;
     static constexpr float kDefaultFontSize = 18.0f;
+    static constexpr float kMinFontSize = 10.0f;
+    static constexpr float kMaxFontSize = 48.0f;
 
     bool parse_rpp_xmidi_notes = true;
     int window_width = kDefaultWindowWidth;

@@ -465,7 +465,7 @@ void render_effect_chain_panel() {
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UI::COL_BG_ELEVATED);
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, UI::COL_BG_SURFACE_ACTIVE);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-            ImGui::Button(("##grip" + std::to_string(item.preset_index)).c_str(), ImVec2(28, 0));
+            ImGui::Button(("##grip" + std::to_string(item.preset_index)).c_str(), ImVec2(UI::S(28), 0));
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
 
@@ -612,9 +612,9 @@ void render_effect_chain_panel() {
 
                         float avail = ImGui::GetContentRegionAvail().x;
                         float spacing = ImGui::GetStyle().ItemSpacing.x;
-                        float picker_w = 24.0f + spacing;
-                        float max_w = avail - picker_w - 6.0f;
-                        if (max_w < 40.0f) max_w = 40.0f;
+                        float picker_w = UI::S(24.0f) + spacing;
+                        float max_w = avail - picker_w - UI::S(6.0f);
+                        if (max_w < UI::S(40.0f)) max_w = UI::S(40.0f);
                         float normal_w = max_w * 0.5f;
 
                         std::string start_key = std::to_string(item.effect_index) + ":" + param.first + ":start";
@@ -635,8 +635,8 @@ void render_effect_chain_panel() {
                             // 第二行：终点，对齐到第一行输入框
                             ImGui::SetCursorPosX(input_start_x);
                             float avail2 = ImGui::GetContentRegionAvail().x;
-                            float max_w2 = avail2 - picker_w - 6.0f;
-                            if (max_w2 < 40.0f) max_w2 = 40.0f;
+                            float max_w2 = avail2 - picker_w - UI::S(6.0f);
+                            if (max_w2 < UI::S(40.0f)) max_w2 = UI::S(40.0f);
                             float normal_w2 = max_w2 * 0.5f;
 
                             if (has_dot1_end) {

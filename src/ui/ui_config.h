@@ -6,11 +6,16 @@ extern ImFont* g_font_bold;
 
 namespace UI {
     // ---- 字号 ----
+    // 设计基准字号：布局常量都按此字号下的像素值给出
     constexpr float FONT_SIZE = 18.0f;
 
+    // 设计像素 → 当前界面像素。字号会随用户设置与显示器缩放变化，
+    // 布局常量统一经此换算，比例才能在任何字号/DPI 下保持一致
+    inline float S(float design_px) { return design_px * (ImGui::GetFontSize() / FONT_SIZE); }
+
     // ---- 轨道树 ----
-    constexpr float TREE_INDENT = 24.0f;
-    constexpr float TREE_LINE_HEIGHT = 28.0f;
+    inline float TREE_INDENT() { return S(24.0f); }
+    inline float TREE_LINE_HEIGHT() { return S(28.0f); }
 
     // ---- 体系化圆角 ----
     constexpr float FRAME_ROUNDING = 4.0f;
@@ -63,7 +68,7 @@ namespace UI {
     constexpr ImU32 COL_DRAG_INSERT = IM_COL32(100, 200, 255, 255);
 
     // 效果链编辑按钮宽度
-    constexpr float EFFECT_CHAIN_BUTTON_WIDTH = 120.0f;
+    inline float EFFECT_CHAIN_BUTTON_WIDTH() { return S(120.0f); }
 
     // ---- 主题注入 ----
     inline void ApplyTheme(ImGuiStyle& style) {

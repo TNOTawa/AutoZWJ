@@ -33,8 +33,10 @@ void preferences_load(const std::wstring& app_data_dir) {
             preferences_save();
         }
     }
-    g_preferences.window_width = std::clamp(read_int(L"window_width", Preferences::kDefaultWindowWidth), 640, 3840);
-    g_preferences.window_height = std::clamp(read_int(L"window_height", Preferences::kDefaultWindowHeight), 420, 2160);
+    g_preferences.window_width = std::clamp(read_int(L"window_width", Preferences::kDefaultWindowWidth),
+                                            Preferences::kMinWindowWidth, Preferences::kMaxWindowWidth);
+    g_preferences.window_height = std::clamp(read_int(L"window_height", Preferences::kDefaultWindowHeight),
+                                             Preferences::kMinWindowHeight, Preferences::kMaxWindowHeight);
     g_preferences.effect_editor_default = read_int(L"effect_editor_default", 0) != 0;
 
     wchar_t font[256] = {};
@@ -42,7 +44,8 @@ void preferences_load(const std::wstring& app_data_dir) {
     g_preferences.font_name = font;
     wchar_t size[64] = {};
     GetPrivateProfileStringW(L"preferences", L"font_size", L"", size, 64, g_ini_path.c_str());
-    if (size[0]) g_preferences.font_size = std::clamp(static_cast<float>(_wtof(size)), 10.0f, 48.0f);
+    if (size[0]) g_preferences.font_size = std::clamp(static_cast<float>(_wtof(size)),
+                                                      Preferences::kMinFontSize, Preferences::kMaxFontSize);
     g_preferences.font_auto_setup_done = read_int(L"font_auto_setup_done", 0) != 0;
 }
 

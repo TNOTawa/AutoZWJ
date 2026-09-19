@@ -217,7 +217,7 @@ static void render_flat_track_node(size_t idx, bool read_only) {
         prefix += has_next_sibling ? u8"├── " : u8"└── ";
     }
 
-    float line_h = UI::TREE_LINE_HEIGHT;
+    float line_h = UI::TREE_LINE_HEIGHT();
     ImVec2 cursor_start = ImGui::GetCursorScreenPos();
 
     // 整行 Selectable（空标签，仅作交互区域）
@@ -362,7 +362,7 @@ void render_nav_bar() {
         // 右侧：效果链编辑（粗体、高亮背景）
         float bar_width = ImGui::GetWindowWidth();
         float left_x = ImGui::GetCursorPosX();
-        float right_x = bar_width - UI::EFFECT_CHAIN_BUTTON_WIDTH - ImGui::GetStyle().FramePadding.x * 2 - 12.0f;
+        float right_x = bar_width - UI::EFFECT_CHAIN_BUTTON_WIDTH() - ImGui::GetStyle().FramePadding.x * 2 - UI::S(12.0f);
         float space = right_x - left_x;
         if (space > 0) {
             ImGui::SameLine(space);
@@ -383,7 +383,7 @@ void render_nav_bar() {
             ImGui::PushFont(g_font_bold);
         }
 
-        if (ImGui::Button(tr(u8"效果链编辑"), ImVec2(UI::EFFECT_CHAIN_BUTTON_WIDTH, 0))) {
+        if (ImGui::Button(tr(u8"效果链编辑"), ImVec2(UI::EFFECT_CHAIN_BUTTON_WIDTH(), 0))) {
             g_show_effect_editor = !g_show_effect_editor;
         }
 
@@ -401,7 +401,7 @@ void render_nav_bar() {
     }
     if (ImGui::BeginPopupModal(tr(u8"BPM网格提示"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("%s", tr(u8"请先导入工程文件"));
-        if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
+        if (ImGui::Button(tr(u8"确定"), ImVec2(UI::S(80), 0))) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -449,7 +449,7 @@ void render_nav_bar() {
 
         ImGui::Separator();
         ImGui::TextDisabled("%s", tr(u8"宿主菜单需重启 AviUtl2 生效"));
-        if (ImGui::Button(tr(u8"关闭"), ImVec2(80, 0))) {
+        if (ImGui::Button(tr(u8"关闭"), ImVec2(UI::S(80), 0))) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -464,7 +464,7 @@ static void render_preferences_popup() {
     }
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0),
-        ImVec2(std::max(1.0f, display.x - 32.0f), std::max(1.0f, display.y - 32.0f)));
+        ImVec2(std::max(1.0f, display.x - UI::S(32.0f)), std::max(1.0f, display.y - UI::S(32.0f))));
     if (!ImGui::BeginPopupModal(tr(u8"首选项"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
     Preferences& pref = preferences();
@@ -486,20 +486,22 @@ static void render_preferences_popup() {
     ImGui::Separator();
     int width = pref.window_width;
     int height = pref.window_height;
-    bool size_changed = false;
-    ImGui::SetNextItemWidth(180.0f);
-    if (ImGui::InputInt(tr(u8"宽度##window"), &width, 10, 100)) size_changed = true;
-    ImGui::SetNextItemWidth(180.0f);
-    if (ImGui::InputInt(tr(u8"高度##window"), &height, 10, 100)) size_changed = true;
-    if (size_changed) {
-        pref.window_width = std::clamp(width, 640, 3840);
-        pref.window_height = std::clamp(height, 420, 2160);
+    bool size_edited = false;
+    ImGui::SetNextItemWidth(UI::S(180.0f));
+    ImGui::InputInt(tr(u8"宽度##window"), &width, 10, 100);
+    if (ImGui::IsItemDeactivatedAfterEdit()) size_edited = true;
+    ImGui::SetNextItemWidth(UI::S(180.0f));
+    ImGui::InputInt(tr(u8"高度##window"), &height, 10, 100);
+    if (ImGui::IsItemDeactivatedAfterEdit()) size_edited = true;
+    if (size_edited) {
+        pref.window_width = std::clamp(width, Preferences::kMinWindowWidth, Preferences::kMaxWindowWidth);
+        pref.window_height = std::clamp(height, Preferences::kMinWindowHeight, Preferences::kMaxWindowHeight);
         preferences_save();
-        imgui_window_apply_preferences();
+        imgui_window_apply_window_size();
     }
     if (ImGui::Button(tr(u8"恢复默认##window"))) {
         preferences_reset_window_size();
-        imgui_window_apply_preferences();
+        imgui_window_apply_window_size();
     }
 
     ImGui::Spacing();
@@ -509,13 +511,13 @@ static void render_preferences_popup() {
     host_get_default_font(host_font);
     std::string preview = pref.font_name.empty()
         ? tr_str(u8"跟随AviUtl2主题") : wide_to_utf8(pref.font_name);
-    ImGui::SetNextItemWidth(std::min(360.0f, std::max(100.0f, display.x - 96.0f)));
+    ImGui::SetNextItemWidth(std::min(UI::S(360.0f), std::max(UI::S(100.0f), display.x - UI::S(96.0f))));
     if (ImGui::BeginCombo("##UIFont", preview.c_str())) {
         bool follow_selected = pref.font_name.empty();
         if (ImGui::Selectable(tr(u8"跟随AviUtl2主题"), follow_selected)) {
             pref.font_name.clear();
             preferences_save();
-            imgui_window_apply_preferences();
+            imgui_window_reload_fonts();
         }
         for (const auto& font : g_available_fonts) {
             bool selected = pref.font_name == font;
@@ -523,7 +525,7 @@ static void render_preferences_popup() {
             if (ImGui::Selectable(label.c_str(), selected)) {
                 pref.font_name = font;
                 preferences_save();
-                imgui_window_apply_preferences();
+                imgui_window_reload_fonts();
             }
             if (selected) ImGui::SetItemDefaultFocus();
         }
@@ -535,20 +537,17 @@ static void render_preferences_popup() {
     }
     if (ImGui::Button(tr(u8"恢复默认##font"))) {
         preferences_reset_font();
-        imgui_window_apply_preferences();
+        imgui_window_reload_fonts();
     }
 
     float font_size = pref.font_size;
-    ImGui::SetNextItemWidth(180.0f);
-    if (ImGui::InputFloat(tr(u8"字号"), &font_size, 1.0f, 2.0f, "%.1f",
-                          ImGuiInputTextFlags_EnterReturnsTrue)) {
-        pref.font_size = std::clamp(font_size, 10.0f, 48.0f);
-        preferences_save();
-        imgui_window_apply_preferences();
+    ImGui::SetNextItemWidth(UI::S(180.0f));
+    if (ImGui::InputFloat(tr(u8"字号"), &font_size, 1.0f, 2.0f, "%.1f")) {
+        pref.font_size = std::clamp(font_size, Preferences::kMinFontSize, Preferences::kMaxFontSize);
+        preferences_save();  // 字号由逐帧同步生效，不重建字体集也不动窗口尺寸
     }
     if (ImGui::Button(tr(u8"恢复默认##font_size"))) {
         preferences_reset_font_size();
-        imgui_window_apply_preferences();
     }
 
     ImGui::Spacing();
@@ -577,13 +576,14 @@ static void render_preferences_popup() {
     }
     if (ImGui::BeginPopupModal(tr(u8"确认恢复所有默认配置"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("%s", tr(u8"确定要恢复所有首选项的默认配置吗？"));
-        if (ImGui::Button(tr(u8"确定"), ImVec2(90, 0))) {
+        if (ImGui::Button(tr(u8"确定"), ImVec2(UI::S(90), 0))) {
             preferences_reset_all();
-            imgui_window_apply_preferences();
+            imgui_window_apply_window_size();
+            imgui_window_reload_fonts();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button(tr(u8"取消"), ImVec2(90, 0))) ImGui::CloseCurrentPopup();
+        if (ImGui::Button(tr(u8"取消"), ImVec2(UI::S(90), 0))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     ImGui::EndPopup();
@@ -622,7 +622,7 @@ void render_import_page() {
         combo_preview = (sep != std::string::npos) ? name.substr(sep + 1) : name;
     }
 
-    ImGui::SetNextItemWidth(280);
+    ImGui::SetNextItemWidth(UI::S(280));
     if (ImGui::BeginCombo("##RecentCombo", combo_preview.c_str())) {
         for (int i = 0; i < (int)recent_files.size(); i++) {
             std::string name = wide_to_utf8(recent_files[i]);
@@ -661,10 +661,10 @@ void render_import_page() {
 
     // --- 轨道树（可滚动区域，留空间给底部按钮）---
     float msg_height = app_msg_current().text.empty() ? 0.0f : ImGui::GetFrameHeightWithSpacing();
-    float button_height = 45.0f;
+    float button_height = UI::S(45.0f);
     float avail_h = ImGui::GetContentRegionAvail().y - button_height - msg_height - ImGui::GetStyle().ItemSpacing.y;
 
-    ImGui::BeginChild("ImportTreeScroll", ImVec2(0, std::max(avail_h, 100.0f)), true);
+    ImGui::BeginChild("ImportTreeScroll", ImVec2(0, std::max(avail_h, UI::S(100.0f))), true);
     render_track_tree(true);
     ImGui::EndChild();
 
@@ -672,7 +672,7 @@ void render_import_page() {
     render_message_bar();
 
     // --- 底部固定按钮区：确认导入 / 取消 ---
-    if (ImGui::Button(tr(u8"确认导入"), ImVec2(140, 35))) {
+    if (ImGui::Button(tr(u8"确认导入"), ImVec2(UI::S(140), UI::S(35)))) {
         if (g_app.project.has_data) {
             // 恢复上次使用的模板（如有），无条件进入配置页；无模板时由配置页横幅引导
             if (!g_app.project.template_alias.empty() && g_app.templates.empty()) {
@@ -688,7 +688,7 @@ void render_import_page() {
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button(tr(u8"取消"), ImVec2(100, 35))) {
+    if (ImGui::Button(tr(u8"取消"), ImVec2(UI::S(100), UI::S(35)))) {
         // 误触进入导入页的退出通道：有工程回配置页，无工程关闭窗口
         if (g_app.project.has_data) {
             g_current_page = AppPage::Config;
@@ -699,7 +699,7 @@ void render_import_page() {
 
     if (ImGui::BeginPopupModal(tr(u8"提示"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("%s", tr(u8"请先选择一个工程文件"));
-        if (ImGui::Button(tr(u8"确定"), ImVec2(80, 0))) {
+        if (ImGui::Button(tr(u8"确定"), ImVec2(UI::S(80), 0))) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -782,13 +782,13 @@ void render_config_page() {
     }
 
     float msg_h = app_msg_current().text.empty() ? 0.0f : ImGui::GetFrameHeightWithSpacing();
-    float avail_h = ImGui::GetContentRegionAvail().y - 50.0f - msg_h;
+    float avail_h = ImGui::GetContentRegionAvail().y - UI::S(50.0f) - msg_h;
     float avail_w = ImGui::GetContentRegionAvail().x;
 
     static float anim_width = 0.0f;
     float target_w = g_show_effect_editor ? (avail_w * 0.34f) : 0.0f;
     anim_width = anim_width + (target_w - anim_width) * 0.15f;
-    const float kMinRemaining = 260.0f;
+    const float kMinRemaining = UI::S(260.0f);
     anim_width = std::max(0.0f, std::min(anim_width, std::max(avail_w - kMinRemaining, 0.0f)));
 
     if (anim_width < 1.0f) {
@@ -895,7 +895,7 @@ void render_config_panel() {
     }
     ImGui::Checkbox(tr(u8"交替翻转"), &cfg.alt_flip);
     if (cfg.alt_flip) {
-        ImGui::Indent(16);
+        ImGui::Indent(UI::S(16.0f));
         const char* flip_types[] = {
             tr(u8"左右翻转"),
             tr(u8"上下翻转"),
@@ -907,7 +907,7 @@ void render_config_panel() {
         else if (cfg.flip_type == FLIP_VERTICAL) flip_idx = 1;
         else if (cfg.flip_type == FLIP_CW) flip_idx = 2;
         else if (cfg.flip_type == FLIP_CCW) flip_idx = 3;
-        ImGui::SetNextItemWidth(120);
+        ImGui::SetNextItemWidth(UI::S(120.0f));
         ImGui::Combo(tr(u8"翻转方向"), &flip_idx, flip_types, 4);
         if (flip_idx == 0) cfg.flip_type = FLIP_HORIZONTAL;
         else if (flip_idx == 1) cfg.flip_type = FLIP_VERTICAL;
@@ -915,10 +915,10 @@ void render_config_panel() {
         else cfg.flip_type = FLIP_CCW;
 
         const char* counter_modes[] = { tr(u8"全部"), tr(u8"图层") };
-        ImGui::SetNextItemWidth(100);
+        ImGui::SetNextItemWidth(UI::S(100.0f));
         ImGui::Combo(tr(u8"计数模式"), &cfg.flip_counter_mode, counter_modes, 2);
         HelpTooltip(tr(u8"全部：按全局物件顺序计数；图层：仅按当前图层内物件计数"));
-        ImGui::Unindent(16);
+        ImGui::Unindent(UI::S(16.0f));
     }
     if (flip_highlight) {
         ImGui::PopStyleColor(6);
@@ -941,13 +941,13 @@ void render_config_panel() {
     ImGui::Combo(tr(u8"同步模式"), &cfg.sync_mode, sync_labels, 6);
     if (cfg.sync_mode == SYNC_MODE_FIXED || cfg.sync_mode == SYNC_MODE_GAP_FIXED ||
         cfg.sync_mode == SYNC_MODE_STRETCH_HOLD_LAST) {
-        ImGui::Indent(16);
+        ImGui::Indent(UI::S(16.0f));
         ImGui::InputInt(tr(u8"固定帧数"), &cfg.fixed_duration_frames, 1, 10);
         if (cfg.fixed_duration_frames < 1) cfg.fixed_duration_frames = 1;
         if (cfg.sync_mode == SYNC_MODE_STRETCH_HOLD_LAST) {
             ImGui::Checkbox(tr(u8"拉伸至下一音符"), &cfg.stretch_hold_last_to_next);
         }
-        ImGui::Unindent(16);
+        ImGui::Unindent(UI::S(16.0f));
     }
 
     const char* layer_strategy_labels[] = { tr(u8"优化模式"), tr(u8"持续累加模式"), tr(u8"交替换行") };
@@ -959,10 +959,10 @@ void render_config_panel() {
     ImGui::Combo(tr(u8"多音符策略"), &cfg.track_filter_mode, track_filter_labels, 3);
     HelpTooltip(tr(u8"全部独立：每个音符生成一个物件；仅取第N轨/倒数第N轨：仅保留层分配后第 N 层或倒数第 N 层的物件"));
     if (cfg.track_filter_mode != 0) {
-        ImGui::Indent(16);
+        ImGui::Indent(UI::S(16.0f));
         ImGui::InputInt(tr(u8"N"), &cfg.track_filter_n, 1, 1);
         if (cfg.track_filter_n < 1) cfg.track_filter_n = 1;
-        ImGui::Unindent(16);
+        ImGui::Unindent(UI::S(16.0f));
     }
 
     // Phase 4: 多源映射（仅当模板池 >= 2 时显示）
@@ -983,37 +983,37 @@ void render_config_panel() {
 
         ImGui::RadioButton(tr(u8"顺序轮替"), &strategy_idx, 0);
         if (strategy_idx == 0) {
-            ImGui::Indent(24);
+            ImGui::Indent(UI::S(24.0f));
             const char* order_labels[] = { tr(u8"顺序"), tr(u8"倒序"), tr(u8"洗牌") };
             ImGui::Combo("##seq_order", &cfg.mapping_sequential_order, order_labels, 3);
-            ImGui::Unindent(24);
+            ImGui::Unindent(UI::S(24.0f));
         }
 
         ImGui::RadioButton(tr(u8"随机抽选"), &strategy_idx, 1);
         if (strategy_idx == 1) {
-            ImGui::Indent(24);
+            ImGui::Indent(UI::S(24.0f));
             ImGui::Checkbox(tr(u8"禁止连续重复"), &cfg.mapping_no_consecutive);
-            ImGui::Unindent(24);
+            ImGui::Unindent(UI::S(24.0f));
         }
 
         ImGui::RadioButton(tr(u8"和弦映射"), &strategy_idx, 2);
         if (strategy_idx == 2) {
-            ImGui::Indent(24);
+            ImGui::Indent(UI::S(24.0f));
             if (cfg.track_filter_mode != 0) {
                 ImGui::TextColored(UI::COL_WARNING_TEXT, "⚠ %s", tr(u8"需要多音符策略设为\"全部独立\""));
             } else {
                 ImGui::TextDisabled("%s", tr(u8"使用和弦位置分配模板"));
             }
-            ImGui::Unindent(24);
+            ImGui::Unindent(UI::S(24.0f));
         }
 
         ImGui::RadioButton(tr(u8"动画序列 [beta]"), &strategy_idx, 3);
         if (strategy_idx == 3) {
-            ImGui::Indent(24);
+            ImGui::Indent(UI::S(24.0f));
             ImGui::Checkbox(tr(u8"允许拉伸"), &cfg.animation_sequence_allow_stretch);
             ImGui::TextDisabled("%s", tr(u8"动画序列允许拉伸说明"));
             ImGui::TextDisabled("%s", tr(u8"将模板物件视为同一音的动画序列"));
-            ImGui::Unindent(24);
+            ImGui::Unindent(UI::S(24.0f));
         }
 
         cfg.mapping_strategy = strategy_idx + 1;
@@ -1025,7 +1025,7 @@ void render_config_panel() {
 // ---------------------------------------------------------------------------
 void render_action_bar() {
     ImGui::Separator();
-    if (ImGui::Button(tr(u8"重新选择文件..."), ImVec2(140, 0))) {
+    if (ImGui::Button(tr(u8"重新选择文件..."), ImVec2(UI::S(140), 0))) {
         imgui_window_hide();
         show_file_picker(GetActiveWindow(), [](const std::wstring& path) {
             if (select_project(g_app, path)) {
@@ -1034,19 +1034,19 @@ void render_action_bar() {
         });
     }
 
-    float right_x = ImGui::GetContentRegionAvail().x - 110 - 110 - ImGui::GetStyle().ItemSpacing.x;
+    float right_x = ImGui::GetContentRegionAvail().x - UI::S(110.0f) - UI::S(110.0f) - ImGui::GetStyle().ItemSpacing.x;
     ImGui::SameLine(right_x);
 
     // 无工程或无模板时禁用生成（on_generate_from_imgui 内部检查保留作双保险）
     bool can_generate = g_app.project.has_data && !g_app.templates.empty();
     ImGui::BeginDisabled(!can_generate);
 
-    if (ImGui::Button(tr(u8"应用"), ImVec2(110, 30))) {
+    if (ImGui::Button(tr(u8"应用"), ImVec2(UI::S(110), UI::S(30)))) {
         if (g_app.project.has_data)
             imgui_window_trigger_generate();
     }
     ImGui::SameLine();
-    if (ImGui::Button(tr(u8"确定"), ImVec2(110, 30))) {
+    if (ImGui::Button(tr(u8"确定"), ImVec2(UI::S(110), UI::S(30)))) {
         if (g_app.project.has_data && imgui_window_trigger_generate()) {
             imgui_window_hide();
         }

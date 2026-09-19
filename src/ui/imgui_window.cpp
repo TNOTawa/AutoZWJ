@@ -11,6 +11,7 @@
 #include <d3d11.h>
 #include <cstdio>
 #include <algorithm>
+#include <cmath>
 #include <cwctype>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -30,6 +31,8 @@ static bool g_visible = false;
 static bool g_initialized = false;
 static bool g_rendering = false;
 static bool g_apply_preferences_requested = false;
+static float g_dpi_scale = 1.0f;          // 当前显示器缩放（1.0 = 96 DPI）
+static float g_applied_font_size = 0.0f;  // 已写入样式的字号
 static bool (*g_on_generate)() = nullptr;
 static WNDCLASSEXW g_wc = {};
 ImFont* g_font_normal = nullptr;
@@ -39,6 +42,46 @@ static constexpr wchar_t k_window_class_name[] = L"AutoZWJ_Window";
 static constexpr wchar_t k_window_title[] = L"AutoZWJ";
 
 #define TIMER_RENDER 1
+
+// ---- DPI ----
+// 宿主 AviUtl2 是 Per-Monitor V2 进程，插件窗口不会被系统拉伸，
+// 因此字号与内间距必须自己按显示器缩放，否则高 DPI 下整窗偏小
+static float window_dpi_scale() {
+    if (!g_imgui_hwnd) return 1.0f;
+    const float scale = ImGui_ImplWin32_GetDpiScaleForHwnd(g_imgui_hwnd);
+    return scale > 0.0f ? scale : 1.0f;
+}
+
+// 偏好中的窗口尺寸是 96 DPI 逻辑值
+static int scale_px(int logical, float scale) {
+    return static_cast<int>(std::lround(static_cast<double>(logical) * scale));
+}
+
+// ScaleAllSizes 是累乘的，故每次都从基准主题重新写入再缩放
+static void apply_ui_scale(float scale) {
+    ImGuiStyle& style = ImGui::GetStyle();
+    UI::ApplyTheme(style);
+    style.FontScaleDpi = scale;
+    if (scale != 1.0f) style.ScaleAllSizes(scale);
+}
+
+// 用户拖动窗口后回写偏好尺寸，避免后续任何设置变更把窗口拉回陈旧大小
+static void remember_window_size() {
+    if (!g_initialized || !g_imgui_hwnd) return;
+    if (IsIconic(g_imgui_hwnd) || IsZoomed(g_imgui_hwnd)) return;
+    const float scale = window_dpi_scale();  // 以窗口所在显示器为准，避免用到过期的缩放值
+    if (scale <= 0.0f) return;
+    RECT rc = {};
+    if (!GetWindowRect(g_imgui_hwnd, &rc)) return;
+    const int logical_w = static_cast<int>(std::lround((rc.right - rc.left) / scale));
+    const int logical_h = static_cast<int>(std::lround((rc.bottom - rc.top) / scale));
+    if (logical_w == preferences().window_width && logical_h == preferences().window_height) return;
+    preferences().window_width =
+        std::clamp(logical_w, Preferences::kMinWindowWidth, Preferences::kMaxWindowWidth);
+    preferences().window_height =
+        std::clamp(logical_h, Preferences::kMinWindowHeight, Preferences::kMaxWindowHeight);
+    preferences_save();
+}
 
 static bool path_exists(const std::wstring& path) {
     return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
@@ -130,6 +173,7 @@ static void load_imgui_fonts() {
     g_font_bold = g_font_normal;
     io.FontDefault = g_font_normal;
     ImGui::GetStyle().FontSizeBase = font_size;
+    g_applied_font_size = font_size;
 }
 
 static bool create_render_target() {
@@ -198,6 +242,8 @@ static void resize_swapchain() {
     int w = rc.right - rc.left;
     int h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0) return;
+    // 后台缓冲仍绑在 OM 上时 ResizeBuffers 可能失败，失败会让画面被拉伸
+    g_d3d_context->OMSetRenderTargets(0, nullptr, nullptr);
     if (g_rtv) { g_rtv->Release(); g_rtv = nullptr; }
     g_swap_chain->ResizeBuffers(0, (UINT)w, (UINT)h, DXGI_FORMAT_UNKNOWN, 0);
     create_render_target();
@@ -212,6 +258,18 @@ static void render_frame() {
     while (PeekMessageW(&msg, g_imgui_hwnd, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
+    }
+
+    // 显示器缩放与字号：1.92+ 的动态字体图集按需栅格化，
+    // 改字号只需更新 FontSizeBase，不必重建字体集
+    const float dpi_scale = window_dpi_scale();
+    if (dpi_scale != g_dpi_scale) {
+        g_dpi_scale = dpi_scale;
+        apply_ui_scale(g_dpi_scale);
+    }
+    if (preferences().font_size != g_applied_font_size) {
+        g_applied_font_size = preferences().font_size;
+        ImGui::GetStyle().FontSizeBase = g_applied_font_size;
     }
 
     ImGui_ImplDX11_NewFrame();
@@ -254,7 +312,7 @@ static void render_frame() {
 
     if (g_apply_preferences_requested) {
         g_apply_preferences_requested = false;
-        load_imgui_fonts();
+        load_imgui_fonts();  // 仅字体名/主题变化需要重建字体集
     }
 
     g_rendering = false;
@@ -269,6 +327,25 @@ LRESULT CALLBACK imgui_wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SIZE:
         if (g_swap_chain && g_d3d_device && wp != SIZE_MINIMIZED) {
             resize_swapchain();
+        }
+        // 最大化/最小化不覆盖偏好尺寸
+        if (wp == SIZE_RESTORED) remember_window_size();
+        return 0;
+
+    case WM_EXITSIZEMOVE:
+        remember_window_size();
+        break;
+
+    case WM_DPICHANGED:
+        // Per-Monitor V2 下系统不替窗口换算尺寸，需按建议矩形重排，
+        // 否则窗口在不同缩放的显示器之间移动后逻辑尺寸会变化
+        if (g_initialized) {
+            const UINT new_dpi = LOWORD(wp);  // 先更新缩放值，随后的回写才是逻辑尺寸
+            if (new_dpi > 0) g_dpi_scale = static_cast<float>(new_dpi) / 96.0f;
+            const RECT* suggested = reinterpret_cast<const RECT*>(lp);
+            SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                suggested->right - suggested->left, suggested->bottom - suggested->top,
+                SWP_NOZORDER | SWP_NOACTIVATE);
         }
         return 0;
 
@@ -321,6 +398,13 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
     SendMessageW(g_imgui_hwnd, WM_SETICON, ICON_BIG, (LPARAM)g_wc.hIcon);
     SendMessageW(g_imgui_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)g_wc.hIconSm);
 
+    // 偏好尺寸是 96 DPI 逻辑值，窗口按当前显示器缩放创建（显示前修正，避免闪烁）
+    g_dpi_scale = window_dpi_scale();
+    SetWindowPos(g_imgui_hwnd, nullptr, 0, 0,
+        scale_px(preferences().window_width, g_dpi_scale),
+        scale_px(preferences().window_height, g_dpi_scale),
+        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+
     ShowWindow(g_imgui_hwnd, SW_SHOW);
     UpdateWindow(g_imgui_hwnd);
 
@@ -338,7 +422,7 @@ bool imgui_window_init(HINSTANCE hinst, HWND host_window) {
 
     load_imgui_fonts();
 
-    UI::ApplyTheme(ImGui::GetStyle());
+    apply_ui_scale(g_dpi_scale);
 
     ImGui_ImplWin32_Init(g_imgui_hwnd);
     ImGui_ImplDX11_Init(g_d3d_device, g_d3d_context);
@@ -374,22 +458,17 @@ void imgui_window_show() {
     render_frame();
 }
 
-void imgui_window_show_preferences() {
+void imgui_window_reload_fonts() {
     if (!g_initialized) return;
-    request_preferences_popup();
-    ShowWindow(g_imgui_hwnd, SW_SHOW);
-    SetForegroundWindow(g_imgui_hwnd);
-    g_visible = true;
-    InvalidateRect(g_imgui_hwnd, nullptr, FALSE);
-    SetWindowTextW(g_imgui_hwnd, k_window_title);
-    render_frame();
+    g_apply_preferences_requested = true;
 }
 
-void imgui_window_apply_preferences() {
+void imgui_window_apply_window_size() {
     if (!g_initialized) return;
-    SetWindowPos(g_imgui_hwnd, nullptr, 0, 0, preferences().window_width, preferences().window_height,
+    SetWindowPos(g_imgui_hwnd, nullptr, 0, 0,
+        scale_px(preferences().window_width, g_dpi_scale),
+        scale_px(preferences().window_height, g_dpi_scale),
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-    g_apply_preferences_requested = true;
 }
 
 void imgui_window_show_import_page() {

@@ -418,10 +418,6 @@ bool host_get_default_font(std::wstring& name) {
     return true;
 }
 
-static void on_open_preferences(HWND, HINSTANCE) {
-    imgui_window_show_preferences();
-}
-
 EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     HMODULE dll_hinst = nullptr;
     GetModuleHandleExW(
@@ -435,8 +431,6 @@ EXTERN_C __declspec(dllexport) void RegisterPlugin(HOST_APP_TABLE* host) {
     static constexpr wchar_t k_file_drop_filter[] =
         L"RPP/MIDI/UTAU Files\0*.rpp;*.mid;*.midi;*.ust;*.ustx\0";
     host->register_object_menu(s_menu_config.c_str(), on_open_config);
-    static std::wstring s_menu_preferences = utf8_to_wide(tr_str(u8"首选项..."));
-    host->register_config_menu(s_menu_preferences.c_str(), on_open_preferences);
     host->register_file_drop_handler(L"[AutoZWJ] RPP/MIDI/UTAU Input", k_file_drop_filter, on_file_drop);
     up_register_menu(host);
 
