@@ -7,6 +7,7 @@
 // 故不在此暴露。
 // ===================================================================
 
+#include <stdint.h>
 #include <windows.h>
 #include "plugin2.h"
 #include "logger2.h"
